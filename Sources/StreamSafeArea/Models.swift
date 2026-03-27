@@ -36,6 +36,7 @@ protocol OverlayActionHandling: AnyObject {
 }
 
 struct OverlaySettings: Codable {
+    var lastSavedAt: Double?
     enum DisplayMode: String, Codable {
         case frame
         case camera
@@ -60,6 +61,7 @@ struct OverlaySettings: Codable {
     var lockAspectRatio: Bool
 
     static let defaults = OverlaySettings(
+        lastSavedAt: nil,
         x: 100,
         y: 100,
         width: 320,

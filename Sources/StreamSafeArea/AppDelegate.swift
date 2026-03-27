@@ -22,6 +22,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OverlayActionHandling 
         window.orderFrontRegardless()
         panelController.bind(window: window, settings: settings)
         panelController.setResolutionOptions(cameraController.availableResolutions)
+        panelController.updateDebug(current: settings, saved: lastPersistedSettings)
         buildMenu()
         buildStatusItem()
 
@@ -38,6 +39,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OverlayActionHandling 
     @objc private func syncWindowState() {
         settings = window.settings
         panelController.push(settings: settings)
+        panelController.updateDebug(current: settings, saved: lastPersistedSettings)
     }
 
     func rememberCurrentWindowState() {
@@ -45,8 +47,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OverlayActionHandling 
         if let screenNumber = window.screen?.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber {
             settings.targetScreenID = String(screenNumber.intValue)
         }
+        settings.lastSavedAt = Date().timeIntervalSince1970
         lastPersistedSettings = settings
         SettingsStore.shared.save(settings)
+        panelController.updateDebug(current: settings, saved: settings)
     }
 
     private func resolveInitialSettings(_ current: OverlaySettings) -> OverlaySettings {

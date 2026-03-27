@@ -89,6 +89,7 @@ final class ControlPanelController: NSWindowController {
     private let mirrorButton = NSButton(checkboxWithTitle: "镜像视频", target: nil, action: nil)
     private let showBorderInCameraButton = NSButton(checkboxWithTitle: "视频模式保留边框", target: nil, action: nil)
     private let infoLabel = NSTextField(labelWithString: "")
+    private let debugLabel = NSTextField(wrappingLabelWithString: "")
 
     private weak var overlayWindow: OverlayWindow?
     private var settings = OverlaySettings.defaults
@@ -291,6 +292,9 @@ final class ControlPanelController: NSWindowController {
         stack.addArrangedSubview(mirrorButton)
         stack.addArrangedSubview(showBorderInCameraButton)
         stack.addArrangedSubview(infoLabel)
+        debugLabel.font = .monospacedSystemFont(ofSize: 11, weight: .regular)
+        debugLabel.textColor = .secondaryLabelColor
+        stack.addArrangedSubview(debugLabel)
 
         let actionRow = NSStackView()
         actionRow.orientation = .horizontal
@@ -464,8 +468,10 @@ final class ControlPanelController: NSWindowController {
         if let screenNumber = window.screen?.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber {
             saved.targetScreenID = String(screenNumber.intValue)
         }
+        saved.lastSavedAt = Date().timeIntervalSince1970
         SettingsStore.shared.save(saved)
         push(settings: saved)
+        updateDebug(current: window.settings, saved: saved)
     }
 
     @objc private func hideOverlay() { overlayWindow?.orderOut(nil) }
@@ -477,6 +483,10 @@ final class ControlPanelController: NSWindowController {
         body(&next)
         window.apply(next, preservePosition: preservePosition)
         push(settings: window.settings)
+    }
+
+    func updateDebug(current: OverlaySettings, saved: OverlaySettings) {
+        debugLabel.stringValue = "当前: x=\(Int(current.x.rounded())) y=\(Int(current.y.rounded())) w=\(Int(current.width.rounded())) h=\(Int(current.height.rounded())) screen=\(current.targetScreenID ?? "nil")\n已保存: x=\(Int(saved.x.rounded())) y=\(Int(saved.y.rounded())) w=\(Int(saved.width.rounded())) h=\(Int(saved.height.rounded())) screen=\(saved.targetScreenID ?? "nil") ts=\(saved.lastSavedAt.map { String(Int($0)) } ?? "nil")"
     }
 
     func scrollToTop() {
