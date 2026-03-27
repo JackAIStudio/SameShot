@@ -6,6 +6,7 @@ final class OverlayView: NSView {
     private let previewLayer = AVCaptureVideoPreviewLayer()
     private let noCameraLabel = NSTextField(labelWithString: "摄像头不可用")
     private let frameLayer = CAShapeLayer()
+    private let hoverToolbarContainer = NSView()
     private let hoverToolbar = NSStackView()
     private let passthroughButton = NSButton(title: "穿透", target: nil, action: nil)
     private let lockButton = NSButton(title: "锁定", target: nil, action: nil)
@@ -42,7 +43,9 @@ final class OverlayView: NSView {
         cameraContainer.frame = bounds
         previewLayer.frame = cameraContainer.bounds
         noCameraLabel.frame = bounds.insetBy(dx: 16, dy: 16)
-        hoverToolbar.setFrameOrigin(NSPoint(x: 12, y: bounds.height - hoverToolbar.fittingSize.height - 12))
+        let toolbarSize = hoverToolbar.fittingSize
+        hoverToolbarContainer.frame = NSRect(x: 10, y: bounds.height - toolbarSize.height - 14, width: toolbarSize.width + 8, height: toolbarSize.height + 8)
+        hoverToolbar.frame = NSRect(x: 4, y: 4, width: toolbarSize.width, height: toolbarSize.height)
         updateFramePath()
     }
 
@@ -59,7 +62,7 @@ final class OverlayView: NSView {
     }
 
     override func mouseExited(with event: NSEvent) {
-        if !settings.clickThrough { setToolbarVisible(false) }
+        setToolbarVisible(true)
         currentResizeCursor?.pop()
         currentResizeCursor = nil
     }
@@ -67,7 +70,7 @@ final class OverlayView: NSView {
     override func mouseMoved(with event: NSEvent) {
         super.mouseMoved(with: event)
         let point = convert(event.locationInWindow, from: nil)
-        setToolbarVisible(bounds.contains(point) && !settings.clickThrough)
+        setToolbarVisible(true)
         updateResizeCursor(for: point)
     }
 
@@ -108,26 +111,31 @@ final class OverlayView: NSView {
         controlsButton.action = #selector(openControls)
 
         hoverToolbar.orientation = .horizontal
-        hoverToolbar.spacing = 5
-        hoverToolbar.edgeInsets = NSEdgeInsets(top: 5, left: 6, bottom: 5, right: 6)
-        hoverToolbar.wantsLayer = true
-        hoverToolbar.layer?.cornerRadius = 9
-        hoverToolbar.layer?.backgroundColor = NSColor.black.withAlphaComponent(0.42).cgColor
+        hoverToolbar.spacing = 6
+        hoverToolbar.edgeInsets = NSEdgeInsets(top: 6, left: 8, bottom: 6, right: 8)
         hoverToolbar.addArrangedSubview(passthroughButton)
         hoverToolbar.addArrangedSubview(lockButton)
         hoverToolbar.addArrangedSubview(ratioButton)
         hoverToolbar.addArrangedSubview(modeButton)
         hoverToolbar.addArrangedSubview(controlsButton)
-        hoverToolbar.isHidden = true
-        addSubview(hoverToolbar)
+
+        hoverToolbarContainer.wantsLayer = true
+        hoverToolbarContainer.layer?.cornerRadius = 10
+        hoverToolbarContainer.layer?.backgroundColor = NSColor.black.withAlphaComponent(0.42).cgColor
+        hoverToolbarContainer.layer?.borderWidth = 1
+        hoverToolbarContainer.layer?.borderColor = NSColor.white.withAlphaComponent(0.18).cgColor
+        hoverToolbarContainer.addSubview(hoverToolbar)
+        hoverToolbarContainer.isHidden = false
+        addSubview(hoverToolbarContainer)
 
         applySettings()
     }
 
     private func setToolbarVisible(_ visible: Bool) {
-        hoverToolbar.isHidden = !visible
+        hoverToolbarContainer.isHidden = !visible
+        hoverToolbarContainer.alphaValue = visible ? 1.0 : 0.0
         if visible {
-            bringSubviewToFront(hoverToolbar)
+            bringSubviewToFront(hoverToolbarContainer)
         }
     }
 
@@ -171,7 +179,7 @@ final class OverlayView: NSView {
         style(button: controlsButton, active: false)
         modeButton.title = settings.displayMode == .camera ? "线框" : "视频"
         let mousePoint = convert(window?.mouseLocationOutsideOfEventStream ?? .zero, from: nil)
-        setToolbarVisible(bounds.contains(mousePoint) && !settings.clickThrough)
+        setToolbarVisible(true)
         updateResizeCursor(for: mousePoint)
         updateFramePath()
     }
@@ -218,7 +226,7 @@ final class OverlayView: NSView {
 
     private func bringSubviewToFront(_ view: NSView) {
         view.removeFromSuperview()
-        addSubview(view)
+        addSubview(view, positioned: .above, relativeTo: noCameraLabel)
     }
 
     private func updateFramePath() {

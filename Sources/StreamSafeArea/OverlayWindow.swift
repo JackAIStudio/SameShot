@@ -70,15 +70,15 @@ final class OverlayWindow: NSPanel {
     func apply(_ settings: OverlaySettings, preservePosition: Bool = true) {
         var next = settings
         if preservePosition {
-            next.x = self.settings.x
-            next.y = self.settings.y
-            next.width = self.settings.width
-            next.height = self.settings.height
+            next.x = frame.origin.x
+            next.y = frame.origin.y
+            next.width = frame.size.width
+            next.height = frame.size.height
         }
         self.settings = next
         suppressFrameSync = true
-        let frame = NSRect(x: next.x, y: next.y, width: next.width, height: next.height)
-        super.setFrame(frame, display: true)
+        let nextFrame = NSRect(x: next.x, y: next.y, width: next.width, height: next.height)
+        super.setFrame(nextFrame, display: true)
         suppressFrameSync = false
         overlayView.settings = next
         orderFrontRegardless()

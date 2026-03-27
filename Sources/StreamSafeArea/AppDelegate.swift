@@ -54,8 +54,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OverlayActionHandling 
         if let screen = NSScreen.screens.last {
             let visible = screen.visibleFrame
             updated.targetScreenID = Self.screenID(for: screen)
-            updated.x = visible.maxX - updated.width - 40
-            updated.y = visible.minY + 40
+            updated.width = max(updated.width, 700)
+            updated.height = max(updated.height, 420)
+            updated.x = visible.minX + 80
+            updated.y = visible.maxY - updated.height - 120
         }
         return updated
     }
