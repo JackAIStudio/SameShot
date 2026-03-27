@@ -1,11 +1,38 @@
 import AppKit
 
+final class DragValueField: NSTextField {
+    var onDragDelta: ((Double) -> Void)?
+    private var dragStart: NSPoint?
+
+    override func mouseDown(with event: NSEvent) {
+        dragStart = event.locationInWindow
+        window?.makeFirstResponder(nil)
+    }
+
+    override func mouseDragged(with event: NSEvent) {
+        guard let dragStart else { return }
+        let point = event.locationInWindow
+        let dx = point.x - dragStart.x
+        let dy = dragStart.y - point.y
+        let dominant = abs(dx) >= abs(dy) ? dx : dy
+        if abs(dominant) >= 1 {
+            onDragDelta?(Double(dominant))
+            self.dragStart = point
+        }
+    }
+
+    override func mouseUp(with event: NSEvent) {
+        dragStart = nil
+    }
+}
+
 @MainActor
 final class ControlPanelController: NSWindowController {
     private let modeControl = NSSegmentedControl(labels: ["线框", "视频"], trackingMode: .selectOne, target: nil, action: nil)
     private let resolutionPopup = NSPopUpButton(frame: .zero, pullsDown: false)
-    private let widthField = NSTextField(string: "")
-    private let heightField = NSTextField(string: "")
+    private let sourceSizeLabel = NSTextField(labelWithString: "来源分辨率：自动")
+    private let widthField = DragValueField(string: "")
+    private let heightField = DragValueField(string: "")
     private let ratioLockButton = NSButton(title: "🔒", target: nil, action: nil)
     private let borderSlider = NSSlider(value: 0.9, minValue: 0.1, maxValue: 1.0, target: nil, action: nil)
     private let fillSlider = NSSlider(value: 0.08, minValue: 0.0, maxValue: 0.4, target: nil, action: nil)
@@ -49,6 +76,7 @@ final class ControlPanelController: NSWindowController {
         } else {
             resolutionPopup.selectItem(at: 0)
         }
+        updateSourceSizeLabel()
     }
 
     func push(settings: OverlaySettings) {
@@ -70,7 +98,17 @@ final class ControlPanelController: NSWindowController {
         if let idx = resolutionOptions.firstIndex(where: { $0.id == settings.cameraResolutionID }) {
             resolutionPopup.selectItem(at: idx)
         }
-        infoLabel.stringValue = "位置: (\(Int(settings.x.rounded())), \(Int(settings.y.rounded())))  尺寸: \(Int(settings.width.rounded()))×\(Int(settings.height.rounded()))"
+        updateSourceSizeLabel()
+        infoLabel.stringValue = "预览尺寸：\(Int(settings.width.rounded())) × \(Int(settings.height.rounded()))"
+    }
+
+    private func updateSourceSizeLabel() {
+        if let option = resolutionOptions.first(where: { $0.id == settings.cameraResolutionID }),
+           let w = option.width, let h = option.height {
+            sourceSizeLabel.stringValue = "来源分辨率：\(w) × \(h)" + ((option.maxFPS ?? 0) > 0 ? "  ·  ≤\(Int((option.maxFPS ?? 0).rounded()))fps" : "")
+        } else {
+            sourceSizeLabel.stringValue = "来源分辨率：自动"
+        }
     }
 
     private func setupUI() {
@@ -95,7 +133,7 @@ final class ControlPanelController: NSWindowController {
             scrollView.bottomAnchor.constraint(equalTo: root.bottomAnchor)
         ])
 
-        let documentView = NSView(frame: NSRect(x: 0, y: 0, width: 500, height: 900))
+        let documentView = NSView(frame: NSRect(x: 0, y: 0, width: 500, height: 940))
         scrollView.documentView = documentView
 
         let stack = NSStackView()
@@ -123,6 +161,8 @@ final class ControlPanelController: NSWindowController {
         heightField.action = #selector(updateSize)
         ratioLockButton.target = self
         ratioLockButton.action = #selector(toggleAspectRatioLock)
+        widthField.onDragDelta = { [weak self] delta in self?.adjustPreviewSize(delta: delta, forWidth: true) }
+        heightField.onDragDelta = { [weak self] delta in self?.adjustPreviewSize(delta: delta, forWidth: false) }
         [borderSlider, fillSlider, lineSlider, cameraAlphaSlider, cornerSlider].forEach {
             $0.target = self
             $0.action = #selector(updateSliders)
@@ -136,18 +176,15 @@ final class ControlPanelController: NSWindowController {
         showBorderInCameraButton.target = self
         showBorderInCameraButton.action = #selector(toggleFlags)
 
-        widthField.alignment = .center
-        heightField.alignment = .center
-        widthField.controlSize = .large
-        heightField.controlSize = .large
-        widthField.font = .systemFont(ofSize: 16, weight: .medium)
-        heightField.font = .systemFont(ofSize: 16, weight: .medium)
-        widthField.placeholderString = "宽"
-        heightField.placeholderString = "高"
-        widthField.translatesAutoresizingMaskIntoConstraints = false
-        heightField.translatesAutoresizingMaskIntoConstraints = false
-        widthField.widthAnchor.constraint(equalToConstant: 120).isActive = true
-        heightField.widthAnchor.constraint(equalToConstant: 120).isActive = true
+        [widthField, heightField].forEach {
+            $0.alignment = .center
+            $0.controlSize = .large
+            $0.font = .systemFont(ofSize: 16, weight: .medium)
+            $0.translatesAutoresizingMaskIntoConstraints = false
+            $0.widthAnchor.constraint(equalToConstant: 120).isActive = true
+        }
+        widthField.placeholderString = "预览宽"
+        heightField.placeholderString = "预览高"
 
         ratioLockButton.bezelStyle = .rounded
         ratioLockButton.controlSize = .large
@@ -156,12 +193,13 @@ final class ControlPanelController: NSWindowController {
         stack.addArrangedSubview(sectionLabel("显示模式"))
         stack.addArrangedSubview(modeControl)
 
-        stack.addArrangedSubview(sectionLabel("摄像头分辨率"))
+        stack.addArrangedSubview(sectionLabel("来源视频"))
         resolutionPopup.translatesAutoresizingMaskIntoConstraints = false
-        resolutionPopup.widthAnchor.constraint(equalToConstant: 220).isActive = true
+        resolutionPopup.widthAnchor.constraint(equalToConstant: 260).isActive = true
         stack.addArrangedSubview(resolutionPopup)
+        stack.addArrangedSubview(sourceSizeLabel)
 
-        stack.addArrangedSubview(sectionLabel("尺寸"))
+        stack.addArrangedSubview(sectionLabel("预览尺寸"))
         let sizeRow = NSStackView()
         sizeRow.orientation = .horizontal
         sizeRow.alignment = .centerY
@@ -174,6 +212,7 @@ final class ControlPanelController: NSWindowController {
         sizeRow.addArrangedSubview(label("高"))
         sizeRow.addArrangedSubview(heightField)
         stack.addArrangedSubview(sizeRow)
+        stack.addArrangedSubview(helpLabel("可直接输入数值；也可以像 Figma 一样，在宽/高数值框上左右或上下拖动来调整。"))
 
         stack.addArrangedSubview(sectionLabel("边框透明度"))
         stack.addArrangedSubview(fullWidth(borderSlider))
@@ -202,9 +241,40 @@ final class ControlPanelController: NSWindowController {
         stack.addArrangedSubview(actionRow)
     }
 
+    private func adjustPreviewSize(delta: Double, forWidth: Bool) {
+        mutateSettings(preservePosition: false) { settings in
+            let step = max(1, Int(delta.rounded()))
+            if settings.lockAspectRatio, settings.height > 0 {
+                let ratio = settings.width / settings.height
+                if forWidth {
+                    let newWidth = max(80, settings.width + Double(step))
+                    settings.width = newWidth
+                    settings.height = max(80, newWidth / ratio)
+                } else {
+                    let newHeight = max(80, settings.height + Double(step))
+                    settings.height = newHeight
+                    settings.width = max(80, newHeight * ratio)
+                }
+            } else {
+                if forWidth {
+                    settings.width = max(80, settings.width + Double(step))
+                } else {
+                    settings.height = max(80, settings.height + Double(step))
+                }
+            }
+        }
+    }
+
     private func sectionLabel(_ text: String) -> NSTextField {
         let label = NSTextField(labelWithString: text)
         label.font = .systemFont(ofSize: 14, weight: .semibold)
+        return label
+    }
+
+    private func helpLabel(_ text: String) -> NSTextField {
+        let label = NSTextField(wrappingLabelWithString: text)
+        label.font = .systemFont(ofSize: 12)
+        label.textColor = .secondaryLabelColor
         return label
     }
 
@@ -240,9 +310,15 @@ final class ControlPanelController: NSWindowController {
         guard let width = Double(widthField.stringValue),
               let height = Double(heightField.stringValue),
               width >= 80, height >= 80 else { return }
-        mutateSettings(preservePosition: false) {
-            $0.width = width
-            $0.height = height
+        mutateSettings(preservePosition: false) { settings in
+            if settings.lockAspectRatio, settings.height > 0 {
+                let ratio = settings.width / settings.height
+                settings.width = width
+                settings.height = max(80, width / ratio)
+            } else {
+                settings.width = width
+                settings.height = height
+            }
         }
     }
 
