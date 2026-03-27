@@ -11,6 +11,7 @@ final class OverlayWindow: NSPanel {
 
     private let overlayView: OverlayView
     private var suppressFrameSync = false
+    private var observersInstalled = false
 
     init(settings: OverlaySettings, cameraController: CameraSessionController, actionHandler: OverlayActionHandling?) {
         let rect = NSRect(x: settings.x, y: settings.y, width: settings.width, height: settings.height)
@@ -39,6 +40,7 @@ final class OverlayWindow: NSPanel {
         overlayView.actionHandler = actionHandler
         overlayView.cameraController = cameraController
         overlayView.settings = settings
+        installWindowObserversIfNeeded()
         updateBehaviors()
     }
 
@@ -91,6 +93,33 @@ final class OverlayWindow: NSPanel {
         next.width = rect.width
         next.height = rect.height
         apply(next, preservePosition: false)
+    }
+
+    private func installWindowObserversIfNeeded() {
+        guard !observersInstalled else { return }
+        observersInstalled = true
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(windowDidMoveOrResize(_:)),
+            name: NSWindow.didMoveNotification,
+            object: self
+        )
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(windowDidMoveOrResize(_:)),
+            name: NSWindow.didResizeNotification,
+            object: self
+        )
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(windowDidMoveOrResize(_:)),
+            name: NSWindow.didChangeScreenNotification,
+            object: self
+        )
+    }
+
+    @objc private func windowDidMoveOrResize(_ notification: Notification) {
+        syncFromFrame()
     }
 
     private func adjustedFrameRect(_ frameRect: NSRect) -> NSRect {
