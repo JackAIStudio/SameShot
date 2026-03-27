@@ -4,7 +4,6 @@ import AppKit
 final class OverlayWindow: NSPanel {
     var settings = OverlaySettings.defaults {
         didSet {
-            persistFrame()
             updateBehaviors()
         }
     }
@@ -154,10 +153,6 @@ final class OverlayWindow: NSPanel {
         }
         overlayView.settings = settings
         NotificationCenter.default.post(name: .overlayDidChange, object: nil)
-    }
-
-    private func persistFrame() {
-        SettingsStore.shared.save(settings)
     }
 
     private func updateBehaviors() {

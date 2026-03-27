@@ -8,6 +8,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OverlayActionHandling 
     private let panelController = ControlPanelController()
     private let cameraController = CameraSessionController()
     private var statusItem: NSStatusItem?
+    private var autosaveTask: DispatchWorkItem?
+    private let autosaveDelay: TimeInterval = 0.45
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         let resolved = resolveInitialSettings(settings)
@@ -39,10 +41,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OverlayActionHandling 
     @objc private func syncWindowState() {
         settings = window.settings
         panelController.push(settings: settings)
+        scheduleAutosave()
         panelController.updateDebug(current: settings, saved: lastPersistedSettings)
     }
 
     func rememberCurrentWindowState() {
+        autosaveTask?.cancel()
         settings = window.settings
         if let screenNumber = window.screen?.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber {
             settings.targetScreenID = String(screenNumber.intValue)
@@ -51,6 +55,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OverlayActionHandling 
         lastPersistedSettings = settings
         SettingsStore.shared.save(settings)
         panelController.updateDebug(current: settings, saved: settings)
+    }
+
+    private func scheduleAutosave() {
+        autosaveTask?.cancel()
+        let work = DispatchWorkItem { [weak self] in
+            guard let self else { return }
+            self.rememberCurrentWindowState()
+        }
+        autosaveTask = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + autosaveDelay, execute: work)
     }
 
     private func resolveInitialSettings(_ current: OverlaySettings) -> OverlaySettings {
