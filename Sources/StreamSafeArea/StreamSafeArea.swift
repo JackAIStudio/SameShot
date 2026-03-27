@@ -165,7 +165,7 @@ final class OverlayView: NSView {
     private let frameLayer = CAShapeLayer()
 
     var cameraController: CameraSessionController? {
-        didSet { reconnectCamera() }
+        didSet { reconnectCameraIfNeeded() }
     }
 
     var settings: OverlaySettings = .defaults {
@@ -216,7 +216,12 @@ final class OverlayView: NSView {
         applySettings()
     }
 
-    private func reconnectCamera() {
+    private func reconnectCameraIfNeeded() {
+        guard settings.displayMode == .camera else {
+            previewLayer.session = nil
+            noCameraLabel.isHidden = true
+            return
+        }
         cameraController?.attach(to: previewLayer)
         noCameraLabel.isHidden = cameraController?.isAvailable ?? false
     }
@@ -236,6 +241,7 @@ final class OverlayView: NSView {
             connection.isVideoMirrored = settings.mirrorCamera
         }
 
+        reconnectCameraIfNeeded()
         noCameraLabel.isHidden = !(settings.displayMode == .camera && !(cameraController?.isAvailable ?? false))
 
         frameLayer.lineWidth = settings.lineWidth

@@ -42,6 +42,8 @@ cat > "$PLIST" <<'PLIST'
   <string>13.0</string>
   <key>NSHighResolutionCapable</key>
   <true/>
+  <key>NSCameraUsageDescription</key>
+  <string>StreamSafeArea 需要访问摄像头，用于在悬浮窗中显示人物视频预览，帮助直播时避免遮挡主要内容。</string>
 </dict>
 </plist>
 PLIST
