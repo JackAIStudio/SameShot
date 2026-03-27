@@ -342,6 +342,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var settings = SettingsStore.shared.load()
     private let panelController = ControlPanelController()
     private let cameraController = CameraSessionController()
+    private var statusItem: NSStatusItem?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         let resolved = resolveInitialSettings(settings)
@@ -351,12 +352,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         window.orderFrontRegardless()
         panelController.bind(window: window, settings: settings)
         buildMenu()
+        buildStatusItem()
         NotificationCenter.default.addObserver(
             self,
             selector: #selector(syncWindowState),
             name: .overlayDidChange,
             object: nil
         )
+        panelController.showWindow(nil)
         NSApp.activate(ignoringOtherApps: true)
     }
 
@@ -404,13 +407,54 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSApp.mainMenu = mainMenu
     }
 
+    private func buildStatusItem() {
+        let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
+        if let button = item.button {
+            button.title = "SSA"
+            button.toolTip = "StreamSafeArea"
+        }
+
+        let menu = NSMenu()
+        menu.addItem(withTitle: "显示控制面板", action: #selector(showControls), keyEquivalent: "")
+        menu.addItem(withTitle: "切到线框模式", action: #selector(switchToFrameMode), keyEquivalent: "")
+        menu.addItem(withTitle: "切到视频模式", action: #selector(switchToCameraMode), keyEquivalent: "")
+        menu.addItem(withTitle: "切换点击穿透", action: #selector(toggleClickThrough), keyEquivalent: "")
+        menu.addItem(withTitle: "吸附到右下角", action: #selector(snapToBottomRight), keyEquivalent: "")
+        menu.addItem(withTitle: "隐藏悬浮窗", action: #selector(hideOverlay), keyEquivalent: "")
+        menu.addItem(withTitle: "显示悬浮窗", action: #selector(showOverlay), keyEquivalent: "")
+        menu.addItem(NSMenuItem.separator())
+        menu.addItem(withTitle: "退出 StreamSafeArea", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "")
+        item.menu = menu
+        statusItem = item
+    }
+
     @objc private func showControls() {
         panelController.showWindow(nil)
         NSApp.activate(ignoringOtherApps: true)
     }
 
+    @objc private func showOverlay() {
+        window.makeKeyAndOrderFront(nil)
+        window.orderFrontRegardless()
+        NSApp.activate(ignoringOtherApps: true)
+    }
+
+    @objc private func hideOverlay() {
+        window.orderOut(nil)
+    }
+
     @objc private func toggleDisplayMode() {
         settings.displayMode = settings.displayMode == .frame ? .camera : .frame
+        apply(settings)
+    }
+
+    @objc private func switchToFrameMode() {
+        settings.displayMode = .frame
+        apply(settings)
+    }
+
+    @objc private func switchToCameraMode() {
+        settings.displayMode = .camera
         apply(settings)
     }
 
