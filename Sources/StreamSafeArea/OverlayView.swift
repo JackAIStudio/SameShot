@@ -58,11 +58,11 @@ final class OverlayView: NSView {
     }
 
     override func mouseEntered(with event: NSEvent) {
-        setToolbarVisible(true)
+        if !settings.clickThrough { setToolbarVisible(true) }
     }
 
     override func mouseExited(with event: NSEvent) {
-        setToolbarVisible(true)
+        setToolbarVisible(false)
         currentResizeCursor?.pop()
         currentResizeCursor = nil
     }
@@ -70,7 +70,8 @@ final class OverlayView: NSView {
     override func mouseMoved(with event: NSEvent) {
         super.mouseMoved(with: event)
         let point = convert(event.locationInWindow, from: nil)
-        setToolbarVisible(true)
+        let inside = bounds.contains(point)
+        setToolbarVisible(inside && !settings.clickThrough)
         updateResizeCursor(for: point)
     }
 
@@ -125,7 +126,8 @@ final class OverlayView: NSView {
         hoverToolbarContainer.layer?.borderWidth = 1
         hoverToolbarContainer.layer?.borderColor = NSColor.white.withAlphaComponent(0.18).cgColor
         hoverToolbarContainer.addSubview(hoverToolbar)
-        hoverToolbarContainer.isHidden = false
+        hoverToolbarContainer.isHidden = true
+        hoverToolbarContainer.alphaValue = 0.0
         addSubview(hoverToolbarContainer)
 
         applySettings()
@@ -179,7 +181,7 @@ final class OverlayView: NSView {
         style(button: controlsButton, active: false)
         modeButton.title = settings.displayMode == .camera ? "线框" : "视频"
         let mousePoint = convert(window?.mouseLocationOutsideOfEventStream ?? .zero, from: nil)
-        setToolbarVisible(true)
+        setToolbarVisible(bounds.contains(mousePoint) && !settings.clickThrough)
         updateResizeCursor(for: mousePoint)
         updateFramePath()
     }
@@ -206,10 +208,8 @@ final class OverlayView: NSView {
         let nearTop = point.y >= bounds.height - edge
 
         let nextCursor: NSCursor?
-        if nearLeft || nearRight {
-            nextCursor = .resizeLeftRight
-        } else if nearTop || nearBottom {
-            nextCursor = .resizeUpDown
+        if nearLeft || nearRight || nearTop || nearBottom {
+            nextCursor = .openHand
         } else {
             nextCursor = nil
         }
