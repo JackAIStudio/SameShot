@@ -8,6 +8,31 @@ struct OverlaySettings {
         case camera
     }
 
+    enum CameraResolution: String, CaseIterable {
+        case auto
+        case hd720
+        case hd1080
+        case hd4k
+
+        var label: String {
+            switch self {
+            case .auto: return "自动"
+            case .hd720: return "1280×720"
+            case .hd1080: return "1920×1080"
+            case .hd4k: return "3840×2160"
+            }
+        }
+
+        var sessionPreset: AVCaptureSession.Preset {
+            switch self {
+            case .auto: return .high
+            case .hd720: return .hd1280x720
+            case .hd1080: return .hd1920x1080
+            case .hd4k: return .hd4K3840x2160
+            }
+        }
+    }
+
     var x: Double
     var y: Double
     var width: Double
@@ -22,6 +47,7 @@ struct OverlaySettings {
     var cornerRadius: Double
     var mirrorCamera: Bool
     var showBorderInCameraMode: Bool
+    var cameraResolution: CameraResolution
 
     static let defaults = OverlaySettings(
         x: 100,
@@ -37,7 +63,8 @@ struct OverlaySettings {
         cameraAlpha: 0.96,
         cornerRadius: 18,
         mirrorCamera: true,
-        showBorderInCameraMode: true
+        showBorderInCameraMode: true,
+        cameraResolution: .auto
     )
 }
 
@@ -75,6 +102,7 @@ final class SettingsStore {
         var cornerRadius: Double
         var mirrorCamera: Bool
         var showBorderInCameraMode: Bool
+        var cameraResolution: String
 
         init(value: OverlaySettings) {
             x = value.x
@@ -91,6 +119,7 @@ final class SettingsStore {
             cornerRadius = value.cornerRadius
             mirrorCamera = value.mirrorCamera
             showBorderInCameraMode = value.showBorderInCameraMode
+            cameraResolution = value.cameraResolution.rawValue
         }
 
         var value: OverlaySettings {
@@ -108,7 +137,8 @@ final class SettingsStore {
                 cameraAlpha: cameraAlpha,
                 cornerRadius: cornerRadius,
                 mirrorCamera: mirrorCamera,
-                showBorderInCameraMode: showBorderInCameraMode
+                showBorderInCameraMode: showBorderInCameraMode,
+                cameraResolution: OverlaySettings.CameraResolution(rawValue: cameraResolution) ?? .auto
             )
         }
     }
@@ -123,9 +153,11 @@ final class CameraSessionController: NSObject {
     private let session = AVCaptureSession()
     private var configured = false
     private(set) var isAvailable = false
+    private var currentResolution: OverlaySettings.CameraResolution = .auto
 
-    func attach(to previewLayer: AVCaptureVideoPreviewLayer) {
+    func attach(to previewLayer: AVCaptureVideoPreviewLayer, resolution: OverlaySettings.CameraResolution) {
         configureIfNeeded()
+        updateResolutionIfNeeded(resolution)
         previewLayer.session = isAvailable ? session : nil
         previewLayer.videoGravity = .resizeAspectFill
         if isAvailable, !session.isRunning {
@@ -138,8 +170,6 @@ final class CameraSessionController: NSObject {
         configured = true
 
         session.beginConfiguration()
-        session.sessionPreset = .high
-
         defer {
             session.commitConfiguration()
             if isAvailable, !session.isRunning {
@@ -158,6 +188,18 @@ final class CameraSessionController: NSObject {
 
         session.addInput(input)
         isAvailable = true
+        updateResolutionIfNeeded(currentResolution)
+    }
+
+    private func updateResolutionIfNeeded(_ resolution: OverlaySettings.CameraResolution) {
+        currentResolution = resolution
+        guard isAvailable else { return }
+        let preset = resolution.sessionPreset
+        if session.canSetSessionPreset(preset) {
+            session.beginConfiguration()
+            session.sessionPreset = preset
+            session.commitConfiguration()
+        }
     }
 }
 
@@ -221,7 +263,7 @@ final class OverlayView: NSView {
 
     private func reconnectCameraIfNeeded() {
         if settings.displayMode == .camera {
-            cameraController?.attach(to: previewLayer)
+            cameraController?.attach(to: previewLayer, resolution: settings.cameraResolution)
             noCameraLabel.isHidden = cameraController?.isAvailable ?? false
         } else {
             noCameraLabel.isHidden = true
@@ -266,7 +308,7 @@ final class OverlayView: NSView {
 }
 
 @MainActor
-final class OverlayWindow: NSWindow {
+final class OverlayWindow: NSPanel {
     var settings = OverlaySettings.defaults {
         didSet {
             persistFrame()
@@ -281,7 +323,7 @@ final class OverlayWindow: NSWindow {
         overlayView = OverlayView(frame: rect)
         super.init(
             contentRect: rect,
-            styleMask: [.borderless, .resizable],
+            styleMask: [.borderless, .nonactivatingPanel, .resizable],
             backing: .buffered,
             defer: false
         )
@@ -290,9 +332,12 @@ final class OverlayWindow: NSWindow {
         isOpaque = false
         backgroundColor = .clear
         hasShadow = true
-        level = .statusBar
+        level = .screenSaver
         collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary, .ignoresCycle]
         hidesOnDeactivate = false
+        isFloatingPanel = true
+        becomesKeyOnlyIfNeeded = true
+        worksWhenModal = true
         isReleasedWhenClosed = false
         isMovableByWindowBackground = true
         contentView = overlayView
@@ -302,7 +347,7 @@ final class OverlayWindow: NSWindow {
     }
 
     override var canBecomeKey: Bool { true }
-    override var canBecomeMain: Bool { true }
+    override var canBecomeMain: Bool { false }
 
     override func setFrame(_ frameRect: NSRect, display flag: Bool) {
         super.setFrame(frameRect, display: flag)
@@ -332,6 +377,7 @@ final class OverlayWindow: NSWindow {
         let frame = NSRect(x: settings.x, y: settings.y, width: settings.width, height: settings.height)
         super.setFrame(frame, display: true)
         overlayView.settings = settings
+        orderFrontRegardless()
     }
 
     private func updateBehaviors() {
@@ -352,7 +398,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let resolved = resolveInitialSettings(settings)
         settings = resolved
         window = OverlayWindow(settings: resolved, cameraController: cameraController)
-        window.makeKeyAndOrderFront(nil)
         window.orderFrontRegardless()
         panelController.bind(window: window, settings: settings)
         buildMenu()
@@ -439,7 +484,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc private func showOverlay() {
-        window.makeKeyAndOrderFront(nil)
         window.orderFrontRegardless()
         NSApp.activate(ignoringOtherApps: true)
     }
@@ -512,6 +556,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 @MainActor
 final class ControlPanelController: NSWindowController {
     private let modeControl = NSSegmentedControl(labels: ["线框", "视频"], trackingMode: .selectOne, target: nil, action: nil)
+    private let resolutionPopup = NSPopUpButton(frame: .zero, pullsDown: false)
     private let widthField = NSTextField(string: "")
     private let heightField = NSTextField(string: "")
     private let borderSlider = NSSlider(value: 0.9, minValue: 0.1, maxValue: 1.0, target: nil, action: nil)
@@ -528,7 +573,7 @@ final class ControlPanelController: NSWindowController {
     private var settings = OverlaySettings.defaults
 
     convenience init() {
-        let contentRect = NSRect(x: 0, y: 0, width: 380, height: 420)
+        let contentRect = NSRect(x: 0, y: 0, width: 420, height: 460)
         let window = NSWindow(contentRect: contentRect, styleMask: [.titled, .closable], backing: .buffered, defer: false)
         self.init(window: window)
         setupUI()
@@ -553,6 +598,9 @@ final class ControlPanelController: NSWindowController {
         clickThroughButton.state = settings.clickThrough ? .on : .off
         mirrorButton.state = settings.mirrorCamera ? .on : .off
         showBorderInCameraButton.state = settings.showBorderInCameraMode ? .on : .off
+        if let idx = OverlaySettings.CameraResolution.allCases.firstIndex(of: settings.cameraResolution) {
+            resolutionPopup.selectItem(at: idx)
+        }
         infoLabel.stringValue = "位置: (\(Int(settings.x.rounded())), \(Int(settings.y.rounded())))  模式: \(settings.displayMode == .frame ? "线框" : "视频")"
     }
 
@@ -579,6 +627,11 @@ final class ControlPanelController: NSWindowController {
         modeControl.target = self
         modeControl.action = #selector(changeDisplayMode)
 
+        resolutionPopup.removeAllItems()
+        resolutionPopup.addItems(withTitles: OverlaySettings.CameraResolution.allCases.map { $0.label })
+        resolutionPopup.target = self
+        resolutionPopup.action = #selector(changeResolution)
+
         widthField.placeholderString = "宽度"
         heightField.placeholderString = "高度"
         widthField.target = self
@@ -599,6 +652,8 @@ final class ControlPanelController: NSWindowController {
 
         stack.addArrangedSubview(label("显示模式"))
         stack.addArrangedSubview(modeControl)
+        stack.addArrangedSubview(label("摄像头分辨率"))
+        stack.addArrangedSubview(resolutionPopup)
 
         let sizeRow = NSStackView(views: [label("宽"), widthField, label("高"), heightField])
         sizeRow.spacing = 8
@@ -641,6 +696,15 @@ final class ControlPanelController: NSWindowController {
     @objc private func changeDisplayMode() {
         guard var current = overlayWindow?.settings else { return }
         current.displayMode = modeControl.selectedSegment == 1 ? .camera : .frame
+        overlayWindow?.apply(current)
+        push(settings: current)
+    }
+
+    @objc private func changeResolution() {
+        guard var current = overlayWindow?.settings else { return }
+        let idx = resolutionPopup.indexOfSelectedItem
+        guard idx >= 0 && idx < OverlaySettings.CameraResolution.allCases.count else { return }
+        current.cameraResolution = OverlaySettings.CameraResolution.allCases[idx]
         overlayWindow?.apply(current)
         push(settings: current)
     }
@@ -704,7 +768,6 @@ final class ControlPanelController: NSWindowController {
         current.y = min(max(mouse.y - current.height / 2, visible.minY + 20), visible.maxY - current.height - 20)
         window.apply(current)
         push(settings: current)
-        window.makeKeyAndOrderFront(nil)
         window.orderFrontRegardless()
     }
 
@@ -713,7 +776,6 @@ final class ControlPanelController: NSWindowController {
     }
 
     @objc private func showOverlay() {
-        overlayWindow?.makeKeyAndOrderFront(nil)
         overlayWindow?.orderFrontRegardless()
     }
 }
