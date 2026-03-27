@@ -2,6 +2,7 @@ import AppKit
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate, OverlayActionHandling {
+    private var lastPersistedSettings = OverlaySettings.defaults
     private var window: OverlayWindow!
     private var settings = SettingsStore.shared.load()
     private let panelController = ControlPanelController()
@@ -16,6 +17,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OverlayActionHandling 
             settings.cameraResolutionID = CameraResolutionOption.auto.id
         }
 
+        lastPersistedSettings = settings
         window = OverlayWindow(settings: settings, cameraController: cameraController, actionHandler: self)
         window.orderFrontRegardless()
         panelController.bind(window: window, settings: settings)
@@ -30,13 +32,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OverlayActionHandling 
             object: nil
         )
 
-        panelController.showWindow(nil)
         NSApp.activate(ignoringOtherApps: true)
     }
 
     @objc private func syncWindowState() {
         settings = window.settings
         panelController.push(settings: settings)
+    }
+
+    func rememberCurrentWindowState() {
+        settings = window.settings
+        lastPersistedSettings = settings
         SettingsStore.shared.save(settings)
     }
 
@@ -186,6 +192,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OverlayActionHandling 
     private func apply(_ newSettings: OverlaySettings) {
         window.apply(newSettings)
         syncWindowState()
+    }
+
+    func applicationWillTerminate(_ notification: Notification) {
+        rememberCurrentWindowState()
     }
 
     static func screenID(for screen: NSScreen) -> String? {

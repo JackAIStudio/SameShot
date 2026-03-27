@@ -295,6 +295,7 @@ final class ControlPanelController: NSWindowController {
         let actionRow = NSStackView()
         actionRow.orientation = .horizontal
         actionRow.spacing = 8
+        actionRow.addArrangedSubview(button("记住当前位置和尺寸", #selector(rememberCurrentState)))
         actionRow.addArrangedSubview(button("吸附右下角", #selector(snapToBottomRight)))
         actionRow.addArrangedSubview(button("到鼠标屏幕", #selector(moveToMouseScreen)))
         actionRow.addArrangedSubview(button("隐藏窗口", #selector(hideOverlay)))
@@ -454,6 +455,12 @@ final class ControlPanelController: NSWindowController {
         next.targetScreenID = AppDelegate.screenID(for: screen)
         window.apply(next)
         window.move(to: rect)
+        push(settings: window.settings)
+    }
+
+    @objc private func rememberCurrentState() {
+        guard let window = overlayWindow else { return }
+        SettingsStore.shared.save(window.settings)
         push(settings: window.settings)
     }
 
