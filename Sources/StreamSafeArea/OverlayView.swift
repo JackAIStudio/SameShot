@@ -13,6 +13,7 @@ final class OverlayView: NSView {
     private let modeButton = NSButton(title: "视频", target: nil, action: nil)
     private let controlsButton = NSButton(title: "设置", target: nil, action: nil)
     private var trackingAreaRef: NSTrackingArea?
+    private var currentResizeCursor: NSCursor?
 
     weak var actionHandler: OverlayActionHandling?
 
@@ -48,17 +49,26 @@ final class OverlayView: NSView {
     override func updateTrackingAreas() {
         super.updateTrackingAreas()
         if let trackingAreaRef { removeTrackingArea(trackingAreaRef) }
-        let area = NSTrackingArea(rect: bounds, options: [.activeAlways, .mouseEnteredAndExited, .inVisibleRect], owner: self, userInfo: nil)
+        let area = NSTrackingArea(rect: bounds, options: [.activeAlways, .activeInKeyWindow, .mouseEnteredAndExited, .mouseMoved, .inVisibleRect], owner: self, userInfo: nil)
         addTrackingArea(area)
         trackingAreaRef = area
     }
 
     override func mouseEntered(with event: NSEvent) {
-        hoverToolbar.isHidden = false
+        setToolbarVisible(true)
     }
 
     override func mouseExited(with event: NSEvent) {
-        if !settings.clickThrough { hoverToolbar.isHidden = true }
+        if !settings.clickThrough { setToolbarVisible(false) }
+        currentResizeCursor?.pop()
+        currentResizeCursor = nil
+    }
+
+    override func mouseMoved(with event: NSEvent) {
+        super.mouseMoved(with: event)
+        let point = convert(event.locationInWindow, from: nil)
+        setToolbarVisible(bounds.contains(point) && !settings.clickThrough)
+        updateResizeCursor(for: point)
     }
 
     private func setupViews() {
@@ -114,6 +124,13 @@ final class OverlayView: NSView {
         applySettings()
     }
 
+    private func setToolbarVisible(_ visible: Bool) {
+        hoverToolbar.isHidden = !visible
+        if visible {
+            bringSubviewToFront(hoverToolbar)
+        }
+    }
+
     private func reconnectCameraIfNeeded() {
         if settings.displayMode == .camera {
             cameraController?.attach(to: previewLayer, resolutionID: settings.cameraResolutionID)
@@ -153,6 +170,9 @@ final class OverlayView: NSView {
         style(button: modeButton, active: settings.displayMode == .camera)
         style(button: controlsButton, active: false)
         modeButton.title = settings.displayMode == .camera ? "线框" : "视频"
+        let mousePoint = convert(window?.mouseLocationOutsideOfEventStream ?? .zero, from: nil)
+        setToolbarVisible(bounds.contains(mousePoint) && !settings.clickThrough)
+        updateResizeCursor(for: mousePoint)
         updateFramePath()
     }
 
@@ -162,6 +182,43 @@ final class OverlayView: NSView {
         button.layer?.borderWidth = 1
         button.layer?.borderColor = (active ? NSColor.systemOrange : NSColor.white.withAlphaComponent(0.18)).cgColor
         button.layer?.backgroundColor = (active ? NSColor.systemOrange.withAlphaComponent(0.28) : NSColor.white.withAlphaComponent(0.06)).cgColor
+    }
+
+    private func updateResizeCursor(for point: NSPoint) {
+        guard !settings.clickThrough, !settings.lockFrame, bounds.contains(point) else {
+            currentResizeCursor?.pop()
+            currentResizeCursor = nil
+            return
+        }
+
+        let edge: CGFloat = 12
+        let nearLeft = point.x <= edge
+        let nearRight = point.x >= bounds.width - edge
+        let nearBottom = point.y <= edge
+        let nearTop = point.y >= bounds.height - edge
+
+        let nextCursor: NSCursor?
+        if nearLeft || nearRight {
+            nextCursor = .resizeLeftRight
+        } else if nearTop || nearBottom {
+            nextCursor = .resizeUpDown
+        } else {
+            nextCursor = nil
+        }
+
+        if let currentResizeCursor, currentResizeCursor !== nextCursor {
+            currentResizeCursor.pop()
+            self.currentResizeCursor = nil
+        }
+        if let nextCursor, currentResizeCursor == nil {
+            nextCursor.push()
+            currentResizeCursor = nextCursor
+        }
+    }
+
+    private func bringSubviewToFront(_ view: NSView) {
+        view.removeFromSuperview()
+        addSubview(view)
     }
 
     private func updateFramePath() {

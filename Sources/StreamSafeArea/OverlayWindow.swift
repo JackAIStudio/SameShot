@@ -34,6 +34,7 @@ final class OverlayWindow: NSPanel {
         worksWhenModal = true
         isReleasedWhenClosed = false
         isMovableByWindowBackground = true
+        acceptsMouseMovedEvents = true
         contentView = overlayView
         overlayView.actionHandler = actionHandler
         overlayView.cameraController = cameraController
