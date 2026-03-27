@@ -7,9 +7,11 @@ final class OverlayView: NSView {
     private let noCameraLabel = NSTextField(labelWithString: "摄像头不可用")
     private let frameLayer = CAShapeLayer()
     private let hoverToolbar = NSStackView()
-    private let controlsButton = NSButton(title: "控制", target: nil, action: nil)
+    private let passthroughButton = NSButton(title: "穿透", target: nil, action: nil)
     private let lockButton = NSButton(title: "锁定", target: nil, action: nil)
     private let ratioButton = NSButton(title: "比例", target: nil, action: nil)
+    private let modeButton = NSButton(title: "视频", target: nil, action: nil)
+    private let controlsButton = NSButton(title: "设置", target: nil, action: nil)
     private var trackingAreaRef: NSTrackingArea?
 
     weak var actionHandler: OverlayActionHandling?
@@ -77,27 +79,35 @@ final class OverlayView: NSView {
         frameLayer.fillColor = NSColor.clear.cgColor
         layer?.addSublayer(frameLayer)
 
-        [controlsButton, lockButton, ratioButton].forEach {
+        [passthroughButton, lockButton, ratioButton, modeButton, controlsButton].forEach {
             $0.bezelStyle = .rounded
             $0.setButtonType(.momentaryPushIn)
-            $0.font = .systemFont(ofSize: 12, weight: .medium)
+            $0.font = .systemFont(ofSize: 11, weight: .semibold)
+            $0.contentTintColor = .white
         }
-        controlsButton.target = self
-        controlsButton.action = #selector(openControls)
+
+        passthroughButton.target = self
+        passthroughButton.action = #selector(togglePassthrough)
         lockButton.target = self
         lockButton.action = #selector(toggleLock)
         ratioButton.target = self
         ratioButton.action = #selector(toggleRatioLock)
+        modeButton.target = self
+        modeButton.action = #selector(toggleMode)
+        controlsButton.target = self
+        controlsButton.action = #selector(openControls)
 
         hoverToolbar.orientation = .horizontal
-        hoverToolbar.spacing = 6
-        hoverToolbar.edgeInsets = NSEdgeInsets(top: 6, left: 8, bottom: 6, right: 8)
+        hoverToolbar.spacing = 5
+        hoverToolbar.edgeInsets = NSEdgeInsets(top: 5, left: 6, bottom: 5, right: 6)
         hoverToolbar.wantsLayer = true
-        hoverToolbar.layer?.cornerRadius = 10
-        hoverToolbar.layer?.backgroundColor = NSColor.black.withAlphaComponent(0.55).cgColor
-        hoverToolbar.addArrangedSubview(controlsButton)
+        hoverToolbar.layer?.cornerRadius = 9
+        hoverToolbar.layer?.backgroundColor = NSColor.black.withAlphaComponent(0.42).cgColor
+        hoverToolbar.addArrangedSubview(passthroughButton)
         hoverToolbar.addArrangedSubview(lockButton)
         hoverToolbar.addArrangedSubview(ratioButton)
+        hoverToolbar.addArrangedSubview(modeButton)
+        hoverToolbar.addArrangedSubview(controlsButton)
         hoverToolbar.isHidden = true
         addSubview(hoverToolbar)
 
@@ -137,9 +147,21 @@ final class OverlayView: NSView {
             : NSColor.clear.cgColor
         frameLayer.isHidden = settings.displayMode == .camera && !settings.showBorderInCameraMode
 
-        lockButton.title = settings.lockFrame ? "已锁定" : "锁定"
-        ratioButton.title = settings.lockAspectRatio ? "比例已锁" : "比例"
+        style(button: passthroughButton, active: settings.clickThrough)
+        style(button: lockButton, active: settings.lockFrame)
+        style(button: ratioButton, active: settings.lockAspectRatio)
+        style(button: modeButton, active: settings.displayMode == .camera)
+        style(button: controlsButton, active: false)
+        modeButton.title = settings.displayMode == .camera ? "线框" : "视频"
         updateFramePath()
+    }
+
+    private func style(button: NSButton, active: Bool) {
+        button.layer?.cornerRadius = 7
+        button.wantsLayer = true
+        button.layer?.borderWidth = 1
+        button.layer?.borderColor = (active ? NSColor.systemOrange : NSColor.white.withAlphaComponent(0.18)).cgColor
+        button.layer?.backgroundColor = (active ? NSColor.systemOrange.withAlphaComponent(0.28) : NSColor.white.withAlphaComponent(0.06)).cgColor
     }
 
     private func updateFramePath() {
@@ -150,6 +172,8 @@ final class OverlayView: NSView {
     }
 
     @objc private func openControls() { actionHandler?.showControls() }
+    @objc private func togglePassthrough() { actionHandler?.toggleClickThrough() }
     @objc private func toggleLock() { actionHandler?.toggleLockFrame() }
     @objc private func toggleRatioLock() { actionHandler?.toggleAspectRatioLock() }
+    @objc private func toggleMode() { actionHandler?.toggleDisplayMode() }
 }

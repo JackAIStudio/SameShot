@@ -118,9 +118,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OverlayActionHandling 
         apply(next)
     }
 
-    @objc private func toggleClickThrough() {
+    @objc func toggleClickThrough() {
         var next = window.settings
         next.clickThrough.toggle()
+        apply(next)
+    }
+
+    @objc func toggleDisplayMode() {
+        var next = window.settings
+        next.displayMode = next.displayMode == .frame ? .camera : .frame
         apply(next)
     }
 

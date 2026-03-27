@@ -28,8 +28,10 @@ struct CameraResolutionOption: Codable, Hashable {
 @MainActor
 protocol OverlayActionHandling: AnyObject {
     func showControls()
+    func toggleClickThrough()
     func toggleLockFrame()
     func toggleAspectRatioLock()
+    func toggleDisplayMode()
     func currentSettings() -> OverlaySettings
 }
 
