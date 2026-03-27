@@ -372,12 +372,13 @@ final class ControlPanelController: NSWindowController {
         let idx = resolutionPopup.indexOfSelectedItem
         guard idx >= 0 && idx < resolutionOptions.count else { return }
         let option = resolutionOptions[idx]
-        mutateSettings(preservePosition: false) {
-            $0.cameraResolutionID = option.id
-            if let w = option.width, let h = option.height {
-                $0.width = Double(w)
-                $0.height = Double(h)
-            }
+        mutateSettings(preservePosition: false) { settings in
+            settings.cameraResolutionID = option.id
+            guard let w = option.width, let h = option.height else { return }
+            let ratio = Double(w) / Double(h)
+            let currentWidth = max(80, settings.width)
+            settings.width = currentWidth
+            settings.height = max(80, currentWidth / ratio)
         }
     }
 

@@ -8,11 +8,9 @@ final class OverlayView: NSView {
     private let frameLayer = CAShapeLayer()
     private let hoverToolbarContainer = NSView()
     private let hoverToolbar = NSStackView()
-    private let passthroughButton = NSButton(title: "穿透", target: nil, action: nil)
-    private let lockButton = NSButton(title: "锁定", target: nil, action: nil)
-    private let ratioButton = NSButton(title: "比例", target: nil, action: nil)
-    private let modeButton = NSButton(title: "视频", target: nil, action: nil)
-    private let controlsButton = NSButton(title: "设置", target: nil, action: nil)
+    private let lockButton = NSButton(title: "锁定位置", target: nil, action: nil)
+    private let ratioButton = NSButton(title: "锁定比例", target: nil, action: nil)
+    private let controlsButton = NSButton(title: "打开设置", target: nil, action: nil)
     private var trackingAreaRef: NSTrackingArea?
     private var currentResizeCursor: NSCursor?
 
@@ -93,31 +91,25 @@ final class OverlayView: NSView {
         frameLayer.fillColor = NSColor.clear.cgColor
         layer?.addSublayer(frameLayer)
 
-        [passthroughButton, lockButton, ratioButton, modeButton, controlsButton].forEach {
+        [lockButton, ratioButton, controlsButton].forEach {
             $0.bezelStyle = .rounded
             $0.setButtonType(.momentaryPushIn)
             $0.font = .systemFont(ofSize: 11, weight: .semibold)
             $0.contentTintColor = .white
         }
 
-        passthroughButton.target = self
-        passthroughButton.action = #selector(togglePassthrough)
         lockButton.target = self
         lockButton.action = #selector(toggleLock)
         ratioButton.target = self
         ratioButton.action = #selector(toggleRatioLock)
-        modeButton.target = self
-        modeButton.action = #selector(toggleMode)
         controlsButton.target = self
         controlsButton.action = #selector(openControls)
 
         hoverToolbar.orientation = .horizontal
         hoverToolbar.spacing = 6
         hoverToolbar.edgeInsets = NSEdgeInsets(top: 6, left: 8, bottom: 6, right: 8)
-        hoverToolbar.addArrangedSubview(passthroughButton)
         hoverToolbar.addArrangedSubview(lockButton)
         hoverToolbar.addArrangedSubview(ratioButton)
-        hoverToolbar.addArrangedSubview(modeButton)
         hoverToolbar.addArrangedSubview(controlsButton)
 
         hoverToolbarContainer.wantsLayer = true
@@ -174,12 +166,12 @@ final class OverlayView: NSView {
             : NSColor.clear.cgColor
         frameLayer.isHidden = settings.displayMode == .camera && !settings.showBorderInCameraMode
 
-        style(button: passthroughButton, active: settings.clickThrough)
         style(button: lockButton, active: settings.lockFrame)
         style(button: ratioButton, active: settings.lockAspectRatio)
-        style(button: modeButton, active: settings.displayMode == .camera)
         style(button: controlsButton, active: false)
-        modeButton.title = settings.displayMode == .camera ? "线框" : "视频"
+        lockButton.title = settings.lockFrame ? "已锁定位置" : "锁定位置"
+        ratioButton.title = settings.lockAspectRatio ? "已锁定比例" : "锁定比例"
+        controlsButton.title = "打开设置"
         let mousePoint = convert(window?.mouseLocationOutsideOfEventStream ?? .zero, from: nil)
         setToolbarVisible(bounds.contains(mousePoint) && !settings.clickThrough)
         updateResizeCursor(for: mousePoint)
@@ -237,8 +229,6 @@ final class OverlayView: NSView {
     }
 
     @objc private func openControls() { actionHandler?.showControls() }
-    @objc private func togglePassthrough() { actionHandler?.toggleClickThrough() }
     @objc private func toggleLock() { actionHandler?.toggleLockFrame() }
     @objc private func toggleRatioLock() { actionHandler?.toggleAspectRatioLock() }
-    @objc private func toggleMode() { actionHandler?.toggleDisplayMode() }
 }
