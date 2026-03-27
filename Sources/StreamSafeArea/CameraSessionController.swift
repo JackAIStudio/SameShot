@@ -24,7 +24,6 @@ final class CameraSessionController: NSObject {
     }
 
     func refreshAvailableResolutions() {
-        if currentDevice == nil { configureIfNeeded() }
         availableResolutions = Self.resolutionOptions(for: currentDevice)
     }
 
