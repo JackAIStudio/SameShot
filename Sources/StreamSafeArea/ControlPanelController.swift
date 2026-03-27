@@ -6,6 +6,7 @@ final class ControlPanelController: NSWindowController {
     private let resolutionPopup = NSPopUpButton(frame: .zero, pullsDown: false)
     private let widthField = NSTextField(string: "")
     private let heightField = NSTextField(string: "")
+    private let ratioLockButton = NSButton(title: "🔒", target: nil, action: nil)
     private let borderSlider = NSSlider(value: 0.9, minValue: 0.1, maxValue: 1.0, target: nil, action: nil)
     private let fillSlider = NSSlider(value: 0.08, minValue: 0.0, maxValue: 0.4, target: nil, action: nil)
     private let lineSlider = NSSlider(value: 3.0, minValue: 1.0, maxValue: 10.0, target: nil, action: nil)
@@ -13,7 +14,6 @@ final class ControlPanelController: NSWindowController {
     private let cornerSlider = NSSlider(value: 18, minValue: 0, maxValue: 40, target: nil, action: nil)
     private let clickThroughButton = NSButton(checkboxWithTitle: "点击穿透", target: nil, action: nil)
     private let lockFrameButton = NSButton(checkboxWithTitle: "锁定位置与尺寸", target: nil, action: nil)
-    private let lockAspectRatioButton = NSButton(checkboxWithTitle: "锁定视频比例", target: nil, action: nil)
     private let mirrorButton = NSButton(checkboxWithTitle: "镜像视频", target: nil, action: nil)
     private let showBorderInCameraButton = NSButton(checkboxWithTitle: "视频模式保留边框", target: nil, action: nil)
     private let infoLabel = NSTextField(labelWithString: "")
@@ -23,12 +23,13 @@ final class ControlPanelController: NSWindowController {
     private var resolutionOptions: [CameraResolutionOption] = [.auto]
 
     convenience init() {
-        let rect = NSRect(x: 0, y: 0, width: 440, height: 490)
-        let window = NSPanel(contentRect: rect, styleMask: [.titled, .closable, .utilityWindow], backing: .buffered, defer: false)
+        let rect = NSRect(x: 0, y: 0, width: 500, height: 620)
+        let window = NSPanel(contentRect: rect, styleMask: [.titled, .closable, .utilityWindow, .resizable], backing: .buffered, defer: false)
         window.isFloatingPanel = true
         window.hidesOnDeactivate = false
         window.level = .floating
         window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+        window.minSize = NSSize(width: 420, height: 520)
         self.init(window: window)
         setupUI()
     }
@@ -62,9 +63,10 @@ final class ControlPanelController: NSWindowController {
         cornerSlider.doubleValue = settings.cornerRadius
         clickThroughButton.state = settings.clickThrough ? .on : .off
         lockFrameButton.state = settings.lockFrame ? .on : .off
-        lockAspectRatioButton.state = settings.lockAspectRatio ? .on : .off
         mirrorButton.state = settings.mirrorCamera ? .on : .off
         showBorderInCameraButton.state = settings.showBorderInCameraMode ? .on : .off
+        ratioLockButton.title = settings.lockAspectRatio ? "🔒" : "🔓"
+        ratioLockButton.toolTip = settings.lockAspectRatio ? "已锁定当前比例" : "点击锁定当前比例"
         if let idx = resolutionOptions.firstIndex(where: { $0.id == settings.cameraResolutionID }) {
             resolutionPopup.selectItem(at: idx)
         }
@@ -74,21 +76,41 @@ final class ControlPanelController: NSWindowController {
     private func setupUI() {
         guard let window else { return }
         window.title = "StreamSafeArea 控制面板"
-        let content = NSView(frame: window.contentView!.bounds)
-        content.autoresizingMask = [.width, .height]
-        window.contentView = content
+
+        let root = NSView(frame: window.contentView!.bounds)
+        root.autoresizingMask = [.width, .height]
+        window.contentView = root
+
+        let scrollView = NSScrollView()
+        scrollView.translatesAutoresizingMaskIntoConstraints = false
+        scrollView.hasVerticalScroller = true
+        scrollView.drawsBackground = false
+        scrollView.borderType = .noBorder
+        root.addSubview(scrollView)
+
+        NSLayoutConstraint.activate([
+            scrollView.leadingAnchor.constraint(equalTo: root.leadingAnchor),
+            scrollView.trailingAnchor.constraint(equalTo: root.trailingAnchor),
+            scrollView.topAnchor.constraint(equalTo: root.topAnchor),
+            scrollView.bottomAnchor.constraint(equalTo: root.bottomAnchor)
+        ])
+
+        let documentView = NSView(frame: NSRect(x: 0, y: 0, width: 500, height: 900))
+        scrollView.documentView = documentView
 
         let stack = NSStackView()
         stack.orientation = .vertical
         stack.alignment = .leading
-        stack.spacing = 10
+        stack.spacing = 12
         stack.translatesAutoresizingMaskIntoConstraints = false
-        content.addSubview(stack)
+        documentView.addSubview(stack)
 
         NSLayoutConstraint.activate([
-            stack.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: 16),
-            stack.trailingAnchor.constraint(equalTo: content.trailingAnchor, constant: -16),
-            stack.topAnchor.constraint(equalTo: content.topAnchor, constant: 16)
+            stack.leadingAnchor.constraint(equalTo: documentView.leadingAnchor, constant: 16),
+            stack.trailingAnchor.constraint(equalTo: documentView.trailingAnchor, constant: -16),
+            stack.topAnchor.constraint(equalTo: documentView.topAnchor, constant: 16),
+            stack.widthAnchor.constraint(equalTo: scrollView.contentView.widthAnchor, constant: -32),
+            stack.bottomAnchor.constraint(equalTo: documentView.bottomAnchor, constant: -20)
         ])
 
         modeControl.target = self
@@ -99,6 +121,8 @@ final class ControlPanelController: NSWindowController {
         widthField.action = #selector(updateSize)
         heightField.target = self
         heightField.action = #selector(updateSize)
+        ratioLockButton.target = self
+        ratioLockButton.action = #selector(toggleAspectRatioLock)
         [borderSlider, fillSlider, lineSlider, cameraAlphaSlider, cornerSlider].forEach {
             $0.target = self
             $0.action = #selector(updateSliders)
@@ -107,48 +131,95 @@ final class ControlPanelController: NSWindowController {
         clickThroughButton.action = #selector(toggleClickThrough)
         lockFrameButton.target = self
         lockFrameButton.action = #selector(toggleLockFrame)
-        lockAspectRatioButton.target = self
-        lockAspectRatioButton.action = #selector(toggleAspectRatioLock)
         mirrorButton.target = self
         mirrorButton.action = #selector(toggleFlags)
         showBorderInCameraButton.target = self
         showBorderInCameraButton.action = #selector(toggleFlags)
 
-        stack.addArrangedSubview(label("显示模式"))
+        widthField.alignment = .center
+        heightField.alignment = .center
+        widthField.controlSize = .large
+        heightField.controlSize = .large
+        widthField.font = .systemFont(ofSize: 16, weight: .medium)
+        heightField.font = .systemFont(ofSize: 16, weight: .medium)
+        widthField.placeholderString = "宽"
+        heightField.placeholderString = "高"
+        widthField.translatesAutoresizingMaskIntoConstraints = false
+        heightField.translatesAutoresizingMaskIntoConstraints = false
+        widthField.widthAnchor.constraint(equalToConstant: 120).isActive = true
+        heightField.widthAnchor.constraint(equalToConstant: 120).isActive = true
+
+        ratioLockButton.bezelStyle = .rounded
+        ratioLockButton.controlSize = .large
+        ratioLockButton.font = .systemFont(ofSize: 18)
+
+        stack.addArrangedSubview(sectionLabel("显示模式"))
         stack.addArrangedSubview(modeControl)
-        stack.addArrangedSubview(label("摄像头分辨率"))
+
+        stack.addArrangedSubview(sectionLabel("摄像头分辨率"))
+        resolutionPopup.translatesAutoresizingMaskIntoConstraints = false
+        resolutionPopup.widthAnchor.constraint(equalToConstant: 220).isActive = true
         stack.addArrangedSubview(resolutionPopup)
 
-        let sizeRow = NSStackView(views: [label("宽"), widthField, label("高"), heightField])
-        sizeRow.spacing = 8
+        stack.addArrangedSubview(sectionLabel("尺寸"))
+        let sizeRow = NSStackView()
+        sizeRow.orientation = .horizontal
+        sizeRow.alignment = .centerY
+        sizeRow.spacing = 10
+        sizeRow.addArrangedSubview(label("宽"))
+        sizeRow.addArrangedSubview(widthField)
+        sizeRow.addArrangedSubview(label("×"))
+        sizeRow.addArrangedSubview(ratioLockButton)
+        sizeRow.addArrangedSubview(label("×"))
+        sizeRow.addArrangedSubview(label("高"))
+        sizeRow.addArrangedSubview(heightField)
         stack.addArrangedSubview(sizeRow)
-        stack.addArrangedSubview(label("边框透明度"))
-        stack.addArrangedSubview(borderSlider)
-        stack.addArrangedSubview(label("线框填充透明度"))
-        stack.addArrangedSubview(fillSlider)
-        stack.addArrangedSubview(label("边框粗细"))
-        stack.addArrangedSubview(lineSlider)
-        stack.addArrangedSubview(label("视频透明度"))
-        stack.addArrangedSubview(cameraAlphaSlider)
-        stack.addArrangedSubview(label("圆角"))
-        stack.addArrangedSubview(cornerSlider)
+
+        stack.addArrangedSubview(sectionLabel("边框透明度"))
+        stack.addArrangedSubview(fullWidth(borderSlider))
+        stack.addArrangedSubview(sectionLabel("线框填充透明度"))
+        stack.addArrangedSubview(fullWidth(fillSlider))
+        stack.addArrangedSubview(sectionLabel("边框粗细"))
+        stack.addArrangedSubview(fullWidth(lineSlider))
+        stack.addArrangedSubview(sectionLabel("视频透明度"))
+        stack.addArrangedSubview(fullWidth(cameraAlphaSlider))
+        stack.addArrangedSubview(sectionLabel("圆角"))
+        stack.addArrangedSubview(fullWidth(cornerSlider))
+
         stack.addArrangedSubview(clickThroughButton)
         stack.addArrangedSubview(lockFrameButton)
-        stack.addArrangedSubview(lockAspectRatioButton)
         stack.addArrangedSubview(mirrorButton)
         stack.addArrangedSubview(showBorderInCameraButton)
         stack.addArrangedSubview(infoLabel)
 
-        let row = NSStackView()
-        row.spacing = 8
-        row.addArrangedSubview(button("吸附右下角", #selector(snapToBottomRight)))
-        row.addArrangedSubview(button("到鼠标屏幕", #selector(moveToMouseScreen)))
-        row.addArrangedSubview(button("隐藏窗口", #selector(hideOverlay)))
-        row.addArrangedSubview(button("显示窗口", #selector(showOverlay)))
-        stack.addArrangedSubview(row)
+        let actionRow = NSStackView()
+        actionRow.orientation = .horizontal
+        actionRow.spacing = 8
+        actionRow.addArrangedSubview(button("吸附右下角", #selector(snapToBottomRight)))
+        actionRow.addArrangedSubview(button("到鼠标屏幕", #selector(moveToMouseScreen)))
+        actionRow.addArrangedSubview(button("隐藏窗口", #selector(hideOverlay)))
+        actionRow.addArrangedSubview(button("显示窗口", #selector(showOverlay)))
+        stack.addArrangedSubview(actionRow)
     }
 
-    private func label(_ text: String) -> NSTextField { NSTextField(labelWithString: text) }
+    private func sectionLabel(_ text: String) -> NSTextField {
+        let label = NSTextField(labelWithString: text)
+        label.font = .systemFont(ofSize: 14, weight: .semibold)
+        return label
+    }
+
+    private func label(_ text: String) -> NSTextField {
+        let label = NSTextField(labelWithString: text)
+        label.font = .systemFont(ofSize: 13)
+        return label
+    }
+
+    private func fullWidth(_ view: NSView) -> NSView {
+        view.translatesAutoresizingMaskIntoConstraints = false
+        view.widthAnchor.constraint(greaterThanOrEqualToConstant: 300).isActive = true
+        return view
+    }
+
     private func button(_ title: String, _ action: Selector) -> NSButton {
         let button = NSButton(title: title, target: self, action: action)
         button.bezelStyle = .rounded
@@ -194,7 +265,7 @@ final class ControlPanelController: NSWindowController {
     }
 
     @objc private func toggleAspectRatioLock() {
-        mutateSettings { $0.lockAspectRatio = (lockAspectRatioButton.state == .on) }
+        mutateSettings { $0.lockAspectRatio.toggle() }
     }
 
     @objc private func toggleFlags() {
