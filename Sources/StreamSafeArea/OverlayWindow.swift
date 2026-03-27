@@ -120,6 +120,9 @@ final class OverlayWindow: NSPanel {
         settings.y = frame.origin.y
         settings.width = frame.size.width
         settings.height = frame.size.height
+        if let screenNumber = screen?.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber {
+            settings.targetScreenID = String(screenNumber.intValue)
+        }
         overlayView.settings = settings
         NotificationCenter.default.post(name: .overlayDidChange, object: nil)
     }

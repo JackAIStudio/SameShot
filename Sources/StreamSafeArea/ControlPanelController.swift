@@ -460,8 +460,12 @@ final class ControlPanelController: NSWindowController {
 
     @objc private func rememberCurrentState() {
         guard let window = overlayWindow else { return }
-        SettingsStore.shared.save(window.settings)
-        push(settings: window.settings)
+        var saved = window.settings
+        if let screenNumber = window.screen?.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber {
+            saved.targetScreenID = String(screenNumber.intValue)
+        }
+        SettingsStore.shared.save(saved)
+        push(settings: saved)
     }
 
     @objc private func hideOverlay() { overlayWindow?.orderOut(nil) }

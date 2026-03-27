@@ -42,6 +42,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OverlayActionHandling 
 
     func rememberCurrentWindowState() {
         settings = window.settings
+        if let screenNumber = window.screen?.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber {
+            settings.targetScreenID = String(screenNumber.intValue)
+        }
         lastPersistedSettings = settings
         SettingsStore.shared.save(settings)
     }
