@@ -128,6 +128,9 @@ final class CameraSessionController: NSObject {
         configureIfNeeded()
         previewLayer.session = isAvailable ? session : nil
         previewLayer.videoGravity = .resizeAspectFill
+        if isAvailable, !session.isRunning {
+            session.startRunning()
+        }
     }
 
     private func configureIfNeeded() {
@@ -217,13 +220,12 @@ final class OverlayView: NSView {
     }
 
     private func reconnectCameraIfNeeded() {
-        guard settings.displayMode == .camera else {
-            previewLayer.session = nil
+        if settings.displayMode == .camera {
+            cameraController?.attach(to: previewLayer)
+            noCameraLabel.isHidden = cameraController?.isAvailable ?? false
+        } else {
             noCameraLabel.isHidden = true
-            return
         }
-        cameraController?.attach(to: previewLayer)
-        noCameraLabel.isHidden = cameraController?.isAvailable ?? false
     }
 
     private func applySettings() {
@@ -288,8 +290,10 @@ final class OverlayWindow: NSWindow {
         isOpaque = false
         backgroundColor = .clear
         hasShadow = true
-        level = .screenSaver
-        collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+        level = .statusBar
+        collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary, .ignoresCycle]
+        hidesOnDeactivate = false
+        isReleasedWhenClosed = false
         isMovableByWindowBackground = true
         contentView = overlayView
         overlayView.cameraController = cameraController
@@ -420,6 +424,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(withTitle: "切到视频模式", action: #selector(switchToCameraMode), keyEquivalent: "")
         menu.addItem(withTitle: "切换点击穿透", action: #selector(toggleClickThrough), keyEquivalent: "")
         menu.addItem(withTitle: "吸附到右下角", action: #selector(snapToBottomRight), keyEquivalent: "")
+        menu.addItem(withTitle: "移动到鼠标所在屏幕", action: #selector(moveOverlayToMouseScreen), keyEquivalent: "")
         menu.addItem(withTitle: "隐藏悬浮窗", action: #selector(hideOverlay), keyEquivalent: "")
         menu.addItem(withTitle: "显示悬浮窗", action: #selector(showOverlay), keyEquivalent: "")
         menu.addItem(NSMenuItem.separator())
@@ -469,6 +474,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         settings.x = visible.maxX - settings.width - 40
         settings.y = visible.minY + 40
         apply(settings)
+    }
+
+    @objc private func moveOverlayToMouseScreen() {
+        let mouse = NSEvent.mouseLocation
+        guard let screen = NSScreen.screens.first(where: { NSMouseInRect(mouse, $0.frame, false) }) ?? NSScreen.main else { return }
+        let visible = screen.visibleFrame
+        settings.targetScreenID = Self.screenID(for: screen)
+        settings.x = min(max(mouse.x - settings.width / 2, visible.minX + 20), visible.maxX - settings.width - 20)
+        settings.y = min(max(mouse.y - settings.height / 2, visible.minY + 20), visible.maxY - settings.height - 20)
+        apply(settings)
+        showOverlay()
     }
 
     private func currentScreen() -> NSScreen? {
@@ -606,6 +622,7 @@ final class ControlPanelController: NSWindowController {
         let buttonRow = NSStackView()
         buttonRow.spacing = 8
         buttonRow.addArrangedSubview(button("吸附右下角", #selector(snapToBottomRight)))
+        buttonRow.addArrangedSubview(button("到鼠标屏幕", #selector(moveToMouseScreen)))
         buttonRow.addArrangedSubview(button("隐藏窗口", #selector(hideOverlay)))
         buttonRow.addArrangedSubview(button("显示窗口", #selector(showOverlay)))
         stack.addArrangedSubview(buttonRow)
@@ -674,6 +691,21 @@ final class ControlPanelController: NSWindowController {
         current.y = visible.minY + 40
         window.apply(current)
         push(settings: current)
+    }
+
+    @objc private func moveToMouseScreen() {
+        guard let window = overlayWindow else { return }
+        let mouse = NSEvent.mouseLocation
+        guard let screen = NSScreen.screens.first(where: { NSMouseInRect(mouse, $0.frame, false) }) ?? NSScreen.main else { return }
+        var current = window.settings
+        let visible = screen.visibleFrame
+        current.targetScreenID = AppDelegate.screenID(for: screen)
+        current.x = min(max(mouse.x - current.width / 2, visible.minX + 20), visible.maxX - current.width - 20)
+        current.y = min(max(mouse.y - current.height / 2, visible.minY + 20), visible.maxY - current.height - 20)
+        window.apply(current)
+        push(settings: current)
+        window.makeKeyAndOrderFront(nil)
+        window.orderFrontRegardless()
     }
 
     @objc private func hideOverlay() {
