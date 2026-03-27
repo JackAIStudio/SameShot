@@ -70,6 +70,7 @@ final class DragHandleView: NSView {
 
 @MainActor
 final class ControlPanelController: NSWindowController {
+    private weak var scrollViewRef: NSScrollView?
     private let modeControl = NSSegmentedControl(labels: ["线框", "视频"], trackingMode: .selectOne, target: nil, action: nil)
     private let resolutionPopup = NSPopUpButton(frame: .zero, pullsDown: false)
     private let sourceSizeLabel = NSTextField(labelWithString: "来源分辨率：自动")
@@ -109,6 +110,7 @@ final class ControlPanelController: NSWindowController {
         self.overlayWindow = window
         self.settings = settings
         push(settings: settings)
+        scrollToTop()
     }
 
     func setResolutionOptions(_ options: [CameraResolutionOption]) {
@@ -169,6 +171,7 @@ final class ControlPanelController: NSWindowController {
         scrollView.drawsBackground = false
         scrollView.borderType = .noBorder
         root.addSubview(scrollView)
+        self.scrollViewRef = scrollView
 
         NSLayoutConstraint.activate([
             scrollView.leadingAnchor.constraint(equalTo: root.leadingAnchor),
@@ -363,7 +366,14 @@ final class ControlPanelController: NSWindowController {
     @objc private func changeResolution() {
         let idx = resolutionPopup.indexOfSelectedItem
         guard idx >= 0 && idx < resolutionOptions.count else { return }
-        mutateSettings { $0.cameraResolutionID = resolutionOptions[idx].id }
+        let option = resolutionOptions[idx]
+        mutateSettings(preservePosition: false) {
+            $0.cameraResolutionID = option.id
+            if let w = option.width, let h = option.height {
+                $0.width = Double(w)
+                $0.height = Double(h)
+            }
+        }
     }
 
     @objc private func updateSize() {
@@ -456,5 +466,11 @@ final class ControlPanelController: NSWindowController {
         body(&next)
         window.apply(next, preservePosition: preservePosition)
         push(settings: window.settings)
+    }
+
+    func scrollToTop() {
+        guard let scrollView = scrollViewRef else { return }
+        scrollView.contentView.scroll(to: NSPoint(x: 0, y: 0))
+        scrollView.reflectScrolledClipView(scrollView.contentView)
     }
 }

@@ -102,6 +102,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OverlayActionHandling 
     @objc func showControls() {
         panelController.showWindow(nil)
         panelController.window?.orderFrontRegardless()
+        panelController.scrollToTop()
         NSApp.activate(ignoringOtherApps: true)
     }
 
