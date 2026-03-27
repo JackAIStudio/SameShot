@@ -13,6 +13,7 @@ final class ControlPanelController: NSWindowController {
     private let cornerSlider = NSSlider(value: 18, minValue: 0, maxValue: 40, target: nil, action: nil)
     private let clickThroughButton = NSButton(checkboxWithTitle: "点击穿透", target: nil, action: nil)
     private let lockFrameButton = NSButton(checkboxWithTitle: "锁定位置与尺寸", target: nil, action: nil)
+    private let lockAspectRatioButton = NSButton(checkboxWithTitle: "锁定视频比例", target: nil, action: nil)
     private let mirrorButton = NSButton(checkboxWithTitle: "镜像视频", target: nil, action: nil)
     private let showBorderInCameraButton = NSButton(checkboxWithTitle: "视频模式保留边框", target: nil, action: nil)
     private let infoLabel = NSTextField(labelWithString: "")
@@ -23,7 +24,11 @@ final class ControlPanelController: NSWindowController {
 
     convenience init() {
         let rect = NSRect(x: 0, y: 0, width: 440, height: 490)
-        let window = NSWindow(contentRect: rect, styleMask: [.titled, .closable], backing: .buffered, defer: false)
+        let window = NSPanel(contentRect: rect, styleMask: [.titled, .closable, .utilityWindow], backing: .buffered, defer: false)
+        window.isFloatingPanel = true
+        window.hidesOnDeactivate = false
+        window.level = .floating
+        window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         self.init(window: window)
         setupUI()
     }
@@ -57,6 +62,7 @@ final class ControlPanelController: NSWindowController {
         cornerSlider.doubleValue = settings.cornerRadius
         clickThroughButton.state = settings.clickThrough ? .on : .off
         lockFrameButton.state = settings.lockFrame ? .on : .off
+        lockAspectRatioButton.state = settings.lockAspectRatio ? .on : .off
         mirrorButton.state = settings.mirrorCamera ? .on : .off
         showBorderInCameraButton.state = settings.showBorderInCameraMode ? .on : .off
         if let idx = resolutionOptions.firstIndex(where: { $0.id == settings.cameraResolutionID }) {
@@ -101,6 +107,8 @@ final class ControlPanelController: NSWindowController {
         clickThroughButton.action = #selector(toggleClickThrough)
         lockFrameButton.target = self
         lockFrameButton.action = #selector(toggleLockFrame)
+        lockAspectRatioButton.target = self
+        lockAspectRatioButton.action = #selector(toggleAspectRatioLock)
         mirrorButton.target = self
         mirrorButton.action = #selector(toggleFlags)
         showBorderInCameraButton.target = self
@@ -126,6 +134,7 @@ final class ControlPanelController: NSWindowController {
         stack.addArrangedSubview(cornerSlider)
         stack.addArrangedSubview(clickThroughButton)
         stack.addArrangedSubview(lockFrameButton)
+        stack.addArrangedSubview(lockAspectRatioButton)
         stack.addArrangedSubview(mirrorButton)
         stack.addArrangedSubview(showBorderInCameraButton)
         stack.addArrangedSubview(infoLabel)
@@ -182,6 +191,10 @@ final class ControlPanelController: NSWindowController {
 
     @objc private func toggleLockFrame() {
         mutateSettings { $0.lockFrame = (lockFrameButton.state == .on) }
+    }
+
+    @objc private func toggleAspectRatioLock() {
+        mutateSettings { $0.lockAspectRatio = (lockAspectRatioButton.state == .on) }
     }
 
     @objc private func toggleFlags() {

@@ -1,7 +1,7 @@
 import AppKit
 
 @MainActor
-final class AppDelegate: NSObject, NSApplicationDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, OverlayActionHandling {
     private var window: OverlayWindow!
     private var settings = SettingsStore.shared.load()
     private let panelController = ControlPanelController()
@@ -16,7 +16,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             settings.cameraResolutionID = CameraResolutionOption.auto.id
         }
 
-        window = OverlayWindow(settings: settings, cameraController: cameraController)
+        window = OverlayWindow(settings: settings, cameraController: cameraController, actionHandler: self)
         window.orderFrontRegardless()
         panelController.bind(window: window, settings: settings)
         panelController.setResolutionOptions(cameraController.availableResolutions)
@@ -69,6 +69,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         appMenu.addItem(withTitle: "控制面板", action: #selector(showControls), keyEquivalent: ",")
         appMenu.addItem(withTitle: "切换点击穿透", action: #selector(toggleClickThrough), keyEquivalent: "t")
         appMenu.addItem(withTitle: "切换锁定位置与尺寸", action: #selector(toggleLockFrame), keyEquivalent: "l")
+        appMenu.addItem(withTitle: "切换锁定视频比例", action: #selector(toggleAspectRatioLock), keyEquivalent: "r")
         appMenu.addItem(withTitle: "吸附到右下角", action: #selector(snapToBottomRight), keyEquivalent: "b")
         appMenu.addItem(NSMenuItem.separator())
         appMenu.addItem(withTitle: "退出 StreamSafeArea", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
@@ -85,6 +86,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(withTitle: "切到视频模式", action: #selector(switchToCameraMode), keyEquivalent: "")
         menu.addItem(withTitle: "切换点击穿透", action: #selector(toggleClickThrough), keyEquivalent: "")
         menu.addItem(withTitle: "切换锁定位置与尺寸", action: #selector(toggleLockFrame), keyEquivalent: "")
+        menu.addItem(withTitle: "切换锁定视频比例", action: #selector(toggleAspectRatioLock), keyEquivalent: "")
         menu.addItem(withTitle: "吸附到右下角", action: #selector(snapToBottomRight), keyEquivalent: "")
         menu.addItem(withTitle: "移动到鼠标所在屏幕", action: #selector(moveOverlayToMouseScreen), keyEquivalent: "")
         menu.addItem(withTitle: "隐藏悬浮窗", action: #selector(hideOverlay), keyEquivalent: "")
@@ -95,8 +97,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         statusItem = item
     }
 
-    @objc private func showControls() {
+    @objc func showControls() {
         panelController.showWindow(nil)
+        panelController.window?.orderFrontRegardless()
         NSApp.activate(ignoringOtherApps: true)
     }
 
@@ -121,10 +124,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         apply(next)
     }
 
-    @objc private func toggleLockFrame() {
+    @objc func toggleLockFrame() {
         var next = window.settings
         next.lockFrame.toggle()
         apply(next)
+    }
+
+    @objc func toggleAspectRatioLock() {
+        var next = window.settings
+        next.lockAspectRatio.toggle()
+        apply(next)
+    }
+
+    func currentSettings() -> OverlaySettings {
+        window.settings
     }
 
     @objc private func snapToBottomRight() {

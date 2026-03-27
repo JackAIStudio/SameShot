@@ -12,7 +12,7 @@ final class OverlayWindow: NSPanel {
     private let overlayView: OverlayView
     private var suppressFrameSync = false
 
-    init(settings: OverlaySettings, cameraController: CameraSessionController) {
+    init(settings: OverlaySettings, cameraController: CameraSessionController, actionHandler: OverlayActionHandling?) {
         let rect = NSRect(x: settings.x, y: settings.y, width: settings.width, height: settings.height)
         overlayView = OverlayView(frame: rect)
         super.init(
@@ -35,6 +35,7 @@ final class OverlayWindow: NSPanel {
         isReleasedWhenClosed = false
         isMovableByWindowBackground = true
         contentView = overlayView
+        overlayView.actionHandler = actionHandler
         overlayView.cameraController = cameraController
         overlayView.settings = settings
         updateBehaviors()
@@ -49,12 +50,14 @@ final class OverlayWindow: NSPanel {
     }
 
     override func setFrame(_ frameRect: NSRect, display flag: Bool) {
-        super.setFrame(frameRect, display: flag)
+        let adjusted = adjustedFrameRect(frameRect)
+        super.setFrame(adjusted, display: flag)
         syncFromFrame()
     }
 
     override func setFrame(_ frameRect: NSRect, display flag: Bool, animate animateFlag: Bool) {
-        super.setFrame(frameRect, display: flag, animate: animateFlag)
+        let adjusted = adjustedFrameRect(frameRect)
+        super.setFrame(adjusted, display: flag, animate: animateFlag)
         syncFromFrame()
     }
 
@@ -87,6 +90,20 @@ final class OverlayWindow: NSPanel {
         next.width = rect.width
         next.height = rect.height
         apply(next, preservePosition: false)
+    }
+
+    private func adjustedFrameRect(_ frameRect: NSRect) -> NSRect {
+        guard settings.lockAspectRatio, settings.height > 0 else { return frameRect }
+        let ratio = settings.width / settings.height
+        let widthDelta = abs(frameRect.width - frame.width)
+        let heightDelta = abs(frameRect.height - frame.height)
+        if widthDelta >= heightDelta {
+            let newHeight = frameRect.width / ratio
+            return NSRect(x: frameRect.origin.x, y: frameRect.origin.y, width: frameRect.width, height: newHeight)
+        } else {
+            let newWidth = frameRect.height * ratio
+            return NSRect(x: frameRect.origin.x, y: frameRect.origin.y, width: newWidth, height: frameRect.height)
+        }
     }
 
     private func syncFromFrame() {

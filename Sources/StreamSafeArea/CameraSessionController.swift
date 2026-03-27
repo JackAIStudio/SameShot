@@ -14,7 +14,9 @@ final class CameraSessionController: NSObject {
     func attach(to previewLayer: AVCaptureVideoPreviewLayer, resolutionID: String) {
         configureIfNeeded()
         updateResolutionIfNeeded(resolutionID)
-        previewLayer.session = isAvailable ? session : nil
+        if previewLayer.session !== session {
+            previewLayer.session = isAvailable ? session : nil
+        }
         previewLayer.videoGravity = .resizeAspectFill
         if isAvailable, !session.isRunning {
             session.startRunning()
@@ -55,11 +57,12 @@ final class CameraSessionController: NSObject {
     }
 
     private func updateResolutionIfNeeded(_ resolutionID: String) {
+        guard resolutionID != currentResolutionID || !configured else { return }
         currentResolutionID = resolutionID
         guard isAvailable else { return }
         let option = availableResolutions.first(where: { $0.id == resolutionID }) ?? .auto
         let preset = option.sessionPreset
-        if session.canSetSessionPreset(preset) {
+        if session.sessionPreset != preset, session.canSetSessionPreset(preset) {
             session.beginConfiguration()
             session.sessionPreset = preset
             session.commitConfiguration()

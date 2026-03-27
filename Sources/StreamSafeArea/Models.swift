@@ -25,6 +25,14 @@ struct CameraResolutionOption: Codable, Hashable {
     }
 }
 
+@MainActor
+protocol OverlayActionHandling: AnyObject {
+    func showControls()
+    func toggleLockFrame()
+    func toggleAspectRatioLock()
+    func currentSettings() -> OverlaySettings
+}
+
 struct OverlaySettings: Codable {
     enum DisplayMode: String, Codable {
         case frame
@@ -47,6 +55,7 @@ struct OverlaySettings: Codable {
     var showBorderInCameraMode: Bool
     var cameraResolutionID: String
     var lockFrame: Bool
+    var lockAspectRatio: Bool
 
     static let defaults = OverlaySettings(
         x: 100,
@@ -64,7 +73,8 @@ struct OverlaySettings: Codable {
         mirrorCamera: true,
         showBorderInCameraMode: true,
         cameraResolutionID: CameraResolutionOption.auto.id,
-        lockFrame: false
+        lockFrame: false,
+        lockAspectRatio: false
     )
 }
 
