@@ -243,23 +243,25 @@ final class ControlPanelController: NSWindowController {
 
     private func adjustPreviewSize(delta: Double, forWidth: Bool) {
         mutateSettings(preservePosition: false) { settings in
-            let step = max(1, Int(delta.rounded()))
+            let rounded = Int(delta.rounded())
+            guard rounded != 0 else { return }
+            let step = Double(rounded)
             if settings.lockAspectRatio, settings.height > 0 {
                 let ratio = settings.width / settings.height
                 if forWidth {
-                    let newWidth = max(80, settings.width + Double(step))
+                    let newWidth = max(80, settings.width + step)
                     settings.width = newWidth
                     settings.height = max(80, newWidth / ratio)
                 } else {
-                    let newHeight = max(80, settings.height + Double(step))
+                    let newHeight = max(80, settings.height + step)
                     settings.height = newHeight
                     settings.width = max(80, newHeight * ratio)
                 }
             } else {
                 if forWidth {
-                    settings.width = max(80, settings.width + Double(step))
+                    settings.width = max(80, settings.width + step)
                 } else {
-                    settings.height = max(80, settings.height + Double(step))
+                    settings.height = max(80, settings.height + step)
                 }
             }
         }
@@ -310,11 +312,21 @@ final class ControlPanelController: NSWindowController {
         guard let width = Double(widthField.stringValue),
               let height = Double(heightField.stringValue),
               width >= 80, height >= 80 else { return }
+        let widthFocused = window?.firstResponder === widthField.currentEditor()
+        let heightFocused = window?.firstResponder === heightField.currentEditor()
         mutateSettings(preservePosition: false) { settings in
             if settings.lockAspectRatio, settings.height > 0 {
                 let ratio = settings.width / settings.height
-                settings.width = width
-                settings.height = max(80, width / ratio)
+                if widthFocused && !heightFocused {
+                    settings.width = width
+                    settings.height = max(80, width / ratio)
+                } else if heightFocused && !widthFocused {
+                    settings.height = height
+                    settings.width = max(80, height * ratio)
+                } else {
+                    settings.width = width
+                    settings.height = max(80, width / ratio)
+                }
             } else {
                 settings.width = width
                 settings.height = height
