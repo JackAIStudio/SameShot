@@ -38,7 +38,7 @@ final class OverlayView: NSView {
     private let closeButton = OverlayIconButton(title: "", target: nil, action: nil)
     private var trackingAreaRef: NSTrackingArea?
     private var currentResizeCursor: NSCursor?
-    private var toolbarFontSize: CGFloat = 13
+    private var toolbarSymbolSize: CGFloat = 16
 
     weak var actionHandler: OverlayActionHandling?
 
@@ -73,14 +73,14 @@ final class OverlayView: NSView {
         let toolbarHeight = max(38, min(48, bounds.height * 0.16))
         let spacing = max(8, min(14, bounds.width * 0.018))
         let buttonPadding = max(18, min(30, bounds.width * 0.04))
-        toolbarFontSize = max(12, min(15, toolbarHeight * 0.34))
+        toolbarSymbolSize = max(15, min(20, toolbarHeight * 0.42))
 
         [lockButton, ratioButton, controlsButton, hideButton].forEach {
             $0.preferredHeight = toolbarHeight
             $0.horizontalPadding = buttonPadding
         }
         hoverToolbar.spacing = spacing
-        refreshButtonTitles()
+        refreshToolbarIcons()
 
         hoverToolbarContainer.frame = NSRect(
             x: sideInset,
@@ -154,9 +154,10 @@ final class OverlayView: NSView {
             $0.isBordered = false
             $0.setButtonType(.momentaryChange)
             $0.focusRingType = .none
-            $0.font = .systemFont(ofSize: 13, weight: .semibold)
             $0.contentTintColor = .white
             $0.wantsLayer = true
+            $0.imagePosition = .imageOnly
+            $0.imageScaling = .scaleProportionallyDown
         }
 
         closeButton.isBordered = false
@@ -248,15 +249,15 @@ final class OverlayView: NSView {
         style(button: controlsButton, active: false)
         style(button: hideButton, active: false)
         styleCloseButton()
-        refreshButtonTitles()
+        refreshToolbarIcons()
         let mousePoint = convert(window?.mouseLocationOutsideOfEventStream ?? .zero, from: nil)
         setToolbarVisible(bounds.contains(mousePoint) && !settings.clickThrough)
         updateResizeCursor(for: mousePoint)
         updateFramePath()
     }
 
-    private func style(button: NSButton, active: Bool) {
-        button.layer?.cornerRadius = 10
+    private func style(button: OverlayToolbarButton, active: Bool) {
+        button.layer?.cornerRadius = max(10, button.preferredHeight * 0.28)
         button.layer?.borderWidth = 1
         button.layer?.borderColor = (active ? NSColor.systemOrange.withAlphaComponent(0.65) : NSColor.white.withAlphaComponent(0.22)).cgColor
         button.layer?.backgroundColor = (active
@@ -279,20 +280,42 @@ final class OverlayView: NSView {
         closeButton.layer?.shadowOffset = NSSize(width: 0, height: -1)
     }
 
-    private func refreshButtonTitles() {
-        setButtonTitle(lockButton, title: settings.lockFrame ? "已锁定位置" : "锁定位置")
-        setButtonTitle(ratioButton, title: settings.lockAspectRatio ? "已锁定比例" : "锁定比例")
-        setButtonTitle(controlsButton, title: "打开设置")
-        setButtonTitle(hideButton, title: "隐藏窗口")
+    private func refreshToolbarIcons() {
+        setToolbarIcon(
+            lockButton,
+            systemName: settings.lockFrame ? "lock.fill" : "lock.open",
+            description: settings.lockFrame ? "已锁定位置与尺寸" : "解除锁定，可拖动与缩放"
+        )
+        setToolbarIcon(
+            ratioButton,
+            systemName: settings.lockAspectRatio ? "aspectratio.fill" : "aspectratio",
+            description: settings.lockAspectRatio ? "已锁定视频比例" : "锁定视频比例"
+        )
+        setToolbarIcon(
+            controlsButton,
+            systemName: "gearshape.fill",
+            description: "打开设置"
+        )
+        setToolbarIcon(
+            hideButton,
+            systemName: "eye.slash.fill",
+            description: "隐藏窗口"
+        )
     }
 
-    private func setButtonTitle(_ button: NSButton, title: String) {
-        let attributes: [NSAttributedString.Key: Any] = [
-            .foregroundColor: NSColor.white,
-            .font: NSFont.systemFont(ofSize: toolbarFontSize, weight: .semibold)
-        ]
-        button.attributedTitle = NSAttributedString(string: title, attributes: attributes)
-        button.attributedAlternateTitle = NSAttributedString(string: title, attributes: attributes)
+    private func setToolbarIcon(_ button: NSButton, systemName: String, description: String) {
+        guard let image = NSImage(systemSymbolName: systemName, accessibilityDescription: description) else {
+            button.image = nil
+            button.toolTip = description
+            return
+        }
+        image.isTemplate = true
+        image.size = NSSize(width: toolbarSymbolSize, height: toolbarSymbolSize)
+        button.image = image
+        button.title = ""
+        button.attributedTitle = NSAttributedString(string: "")
+        button.attributedAlternateTitle = NSAttributedString(string: "")
+        button.toolTip = description
     }
 
     private func closeButtonImage() -> NSImage? {
