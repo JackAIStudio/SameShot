@@ -46,7 +46,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OverlayActionHandling 
         scheduleAutosave()
         panelController.updateDebug(current: settings, saved: lastPersistedSettings)
         if restoreWindow.isVisible {
-            restoreWindow.show(near: window.frame, on: currentScreen())
+            restoreWindow.syncVisiblePosition(near: window.frame, on: currentScreen())
         }
     }
 
