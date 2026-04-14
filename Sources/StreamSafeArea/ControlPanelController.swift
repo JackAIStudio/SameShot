@@ -92,6 +92,7 @@ final class ControlPanelController: NSWindowController {
     private let debugLabel = NSTextField(wrappingLabelWithString: "")
 
     private weak var overlayWindow: OverlayWindow?
+    private weak var actionHandler: OverlayActionHandling?
     private var settings = OverlaySettings.defaults
     private var resolutionOptions: [CameraResolutionOption] = [.auto]
 
@@ -107,8 +108,9 @@ final class ControlPanelController: NSWindowController {
         setupUI()
     }
 
-    func bind(window: OverlayWindow, settings: OverlaySettings) {
+    func bind(window: OverlayWindow, settings: OverlaySettings, actionHandler: OverlayActionHandling) {
         self.overlayWindow = window
+        self.actionHandler = actionHandler
         self.settings = settings
         push(settings: settings)
         scrollToTop()
@@ -475,8 +477,8 @@ final class ControlPanelController: NSWindowController {
         updateDebug(current: window.settings, saved: saved)
     }
 
-    @objc private func hideOverlay() { overlayWindow?.orderOut(nil) }
-    @objc private func showOverlay() { overlayWindow?.orderFrontRegardless() }
+    @objc private func hideOverlay() { actionHandler?.hideOverlay() }
+    @objc private func showOverlay() { actionHandler?.showOverlay() }
 
     private func mutateSettings(preservePosition: Bool = true, _ body: (inout OverlaySettings) -> Void) {
         guard let window = overlayWindow else { return }

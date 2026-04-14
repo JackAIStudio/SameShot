@@ -4,6 +4,7 @@ import AppKit
 final class AppDelegate: NSObject, NSApplicationDelegate, OverlayActionHandling {
     private var lastPersistedSettings = OverlaySettings.defaults
     private var window: OverlayWindow!
+    private var restoreWindow: RestoreOverlayWindow!
     private var settings = SettingsStore.shared.load()
     private let panelController = ControlPanelController()
     private let cameraController = CameraSessionController()
@@ -21,8 +22,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OverlayActionHandling 
 
         lastPersistedSettings = settings
         window = OverlayWindow(settings: settings, cameraController: cameraController, actionHandler: self)
+        restoreWindow = RestoreOverlayWindow(actionHandler: self)
         window.orderFrontRegardless()
-        panelController.bind(window: window, settings: settings)
+        panelController.bind(window: window, settings: settings, actionHandler: self)
         panelController.setResolutionOptions(cameraController.availableResolutions)
         panelController.updateDebug(current: settings, saved: lastPersistedSettings)
         buildMenu()
@@ -43,6 +45,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OverlayActionHandling 
         panelController.push(settings: settings)
         scheduleAutosave()
         panelController.updateDebug(current: settings, saved: lastPersistedSettings)
+        if restoreWindow.isVisible {
+            restoreWindow.show(near: window.frame, on: currentScreen())
+        }
     }
 
     func rememberCurrentWindowState() {
@@ -133,8 +138,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OverlayActionHandling 
         NSApp.activate(ignoringOtherApps: true)
     }
 
-    @objc private func showOverlay() { window.orderFrontRegardless() }
-    @objc private func hideOverlay() { window.orderOut(nil) }
+    @objc func showOverlay() {
+        restoreWindow.orderOut(nil)
+        window.orderFrontRegardless()
+    }
+
+    @objc func hideOverlay() {
+        restoreWindow.show(near: window.frame, on: currentScreen())
+        window.orderOut(nil)
+    }
 
     @objc private func switchToFrameMode() {
         var next = window.settings
@@ -183,7 +195,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OverlayActionHandling 
         let height = CGFloat(window.settings.height)
         let rect = NSRect(x: visible.maxX - width - 40, y: visible.minY + 40, width: width, height: height)
         window.move(to: rect)
-        syncWindowState()
     }
 
     @objc private func moveOverlayToMouseScreen() {
@@ -199,7 +210,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OverlayActionHandling 
         let y = min(max(mouse.y - height / 2, visible.minY + 20), visible.maxY - height - 20)
         let rect = NSRect(x: x, y: y, width: width, height: height)
         window.move(to: rect)
-        syncWindowState()
         showOverlay()
     }
 
@@ -212,7 +222,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OverlayActionHandling 
 
     private func apply(_ newSettings: OverlaySettings) {
         window.apply(newSettings)
-        syncWindowState()
     }
 
     func applicationWillTerminate(_ notification: Notification) {

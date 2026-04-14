@@ -82,7 +82,10 @@ final class OverlayWindow: NSPanel {
         super.setFrame(nextFrame, display: true)
         suppressFrameSync = false
         overlayView.settings = next
-        orderFrontRegardless()
+        if isVisible {
+            orderFrontRegardless()
+        }
+        NotificationCenter.default.post(name: .overlayDidChange, object: nil)
     }
 
     func move(to rect: NSRect) {

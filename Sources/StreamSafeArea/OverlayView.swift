@@ -11,6 +11,7 @@ final class OverlayView: NSView {
     private let lockButton = NSButton(title: "锁定位置", target: nil, action: nil)
     private let ratioButton = NSButton(title: "锁定比例", target: nil, action: nil)
     private let controlsButton = NSButton(title: "打开设置", target: nil, action: nil)
+    private let hideButton = NSButton(title: "隐藏窗口", target: nil, action: nil)
     private var trackingAreaRef: NSTrackingArea?
     private var currentResizeCursor: NSCursor?
 
@@ -91,7 +92,7 @@ final class OverlayView: NSView {
         frameLayer.fillColor = NSColor.clear.cgColor
         layer?.addSublayer(frameLayer)
 
-        [lockButton, ratioButton, controlsButton].forEach {
+        [lockButton, ratioButton, controlsButton, hideButton].forEach {
             $0.bezelStyle = .rounded
             $0.setButtonType(.momentaryPushIn)
             $0.font = .systemFont(ofSize: 11, weight: .semibold)
@@ -104,6 +105,8 @@ final class OverlayView: NSView {
         ratioButton.action = #selector(toggleRatioLock)
         controlsButton.target = self
         controlsButton.action = #selector(openControls)
+        hideButton.target = self
+        hideButton.action = #selector(hideOverlay)
 
         hoverToolbar.orientation = .horizontal
         hoverToolbar.spacing = 6
@@ -111,6 +114,7 @@ final class OverlayView: NSView {
         hoverToolbar.addArrangedSubview(lockButton)
         hoverToolbar.addArrangedSubview(ratioButton)
         hoverToolbar.addArrangedSubview(controlsButton)
+        hoverToolbar.addArrangedSubview(hideButton)
 
         hoverToolbarContainer.wantsLayer = true
         hoverToolbarContainer.layer?.cornerRadius = 10
@@ -169,9 +173,11 @@ final class OverlayView: NSView {
         style(button: lockButton, active: settings.lockFrame)
         style(button: ratioButton, active: settings.lockAspectRatio)
         style(button: controlsButton, active: false)
+        style(button: hideButton, active: false)
         lockButton.title = settings.lockFrame ? "已锁定位置" : "锁定位置"
         ratioButton.title = settings.lockAspectRatio ? "已锁定比例" : "锁定比例"
         controlsButton.title = "打开设置"
+        hideButton.title = "隐藏窗口"
         let mousePoint = convert(window?.mouseLocationOutsideOfEventStream ?? .zero, from: nil)
         setToolbarVisible(bounds.contains(mousePoint) && !settings.clickThrough)
         updateResizeCursor(for: mousePoint)
@@ -229,6 +235,7 @@ final class OverlayView: NSView {
     }
 
     @objc private func openControls() { actionHandler?.showControls() }
+    @objc private func hideOverlay() { actionHandler?.hideOverlay() }
     @objc private func toggleLock() { actionHandler?.toggleLockFrame() }
     @objc private func toggleRatioLock() { actionHandler?.toggleAspectRatioLock() }
 }
