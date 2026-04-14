@@ -148,6 +148,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OverlayActionHandling 
         window.orderOut(nil)
     }
 
+    @objc func requestQuit() {
+        NSApp.activate(ignoringOtherApps: true)
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+        alert.messageText = "确认关闭 StreamSafeArea？"
+        alert.informativeText = "关闭后会退出程序，视频预览和恢复按钮都会消失。"
+        alert.addButton(withTitle: "关闭程序")
+        alert.addButton(withTitle: "取消")
+        if alert.runModal() == .alertFirstButtonReturn {
+            NSApp.terminate(nil)
+        }
+    }
+
     @objc private func switchToFrameMode() {
         var next = window.settings
         next.displayMode = .frame

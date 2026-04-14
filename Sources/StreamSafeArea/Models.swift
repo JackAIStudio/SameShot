@@ -30,6 +30,7 @@ protocol OverlayActionHandling: AnyObject {
     func showControls()
     func showOverlay()
     func hideOverlay()
+    func requestQuit()
     func toggleClickThrough()
     func toggleLockFrame()
     func toggleAspectRatioLock()

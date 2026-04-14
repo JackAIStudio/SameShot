@@ -1,6 +1,29 @@
 import AppKit
 import AVFoundation
 
+private final class OverlayToolbarButton: NSButton {
+    var preferredHeight: CGFloat = 40 {
+        didSet { invalidateIntrinsicContentSize() }
+    }
+
+    var horizontalPadding: CGFloat = 28 {
+        didSet { invalidateIntrinsicContentSize() }
+    }
+
+    override var intrinsicContentSize: NSSize {
+        let base = super.intrinsicContentSize
+        return NSSize(width: base.width + horizontalPadding, height: max(preferredHeight, base.height + 14))
+    }
+}
+
+private final class OverlayIconButton: NSButton {
+    var preferredSize: CGFloat = 34 {
+        didSet { invalidateIntrinsicContentSize() }
+    }
+
+    override var intrinsicContentSize: NSSize { NSSize(width: preferredSize, height: preferredSize) }
+}
+
 final class OverlayView: NSView {
     private let cameraContainer = NSView()
     private let previewLayer = AVCaptureVideoPreviewLayer()
@@ -8,12 +31,14 @@ final class OverlayView: NSView {
     private let frameLayer = CAShapeLayer()
     private let hoverToolbarContainer = NSView()
     private let hoverToolbar = NSStackView()
-    private let lockButton = NSButton(title: "锁定位置", target: nil, action: nil)
-    private let ratioButton = NSButton(title: "锁定比例", target: nil, action: nil)
-    private let controlsButton = NSButton(title: "打开设置", target: nil, action: nil)
-    private let hideButton = NSButton(title: "隐藏窗口", target: nil, action: nil)
+    private let lockButton = OverlayToolbarButton(title: "锁定位置", target: nil, action: nil)
+    private let ratioButton = OverlayToolbarButton(title: "锁定比例", target: nil, action: nil)
+    private let controlsButton = OverlayToolbarButton(title: "打开设置", target: nil, action: nil)
+    private let hideButton = OverlayToolbarButton(title: "隐藏窗口", target: nil, action: nil)
+    private let closeButton = OverlayIconButton(title: "", target: nil, action: nil)
     private var trackingAreaRef: NSTrackingArea?
     private var currentResizeCursor: NSCursor?
+    private var toolbarFontSize: CGFloat = 13
 
     weak var actionHandler: OverlayActionHandling?
 
@@ -42,9 +67,42 @@ final class OverlayView: NSView {
         cameraContainer.frame = bounds
         previewLayer.frame = cameraContainer.bounds
         noCameraLabel.frame = bounds.insetBy(dx: 16, dy: 16)
-        let toolbarSize = hoverToolbar.fittingSize
-        hoverToolbarContainer.frame = NSRect(x: 10, y: bounds.height - toolbarSize.height - 14, width: toolbarSize.width + 8, height: toolbarSize.height + 8)
-        hoverToolbar.frame = NSRect(x: 4, y: 4, width: toolbarSize.width, height: toolbarSize.height)
+        let sideInset = max(10, min(18, bounds.width * 0.028))
+        let topInset = max(10, min(16, bounds.height * 0.05))
+        let bottomInset = max(10, min(16, bounds.height * 0.05))
+        let toolbarHeight = max(38, min(48, bounds.height * 0.16))
+        let spacing = max(8, min(14, bounds.width * 0.018))
+        let buttonPadding = max(18, min(30, bounds.width * 0.04))
+        toolbarFontSize = max(12, min(15, toolbarHeight * 0.34))
+
+        [lockButton, ratioButton, controlsButton, hideButton].forEach {
+            $0.preferredHeight = toolbarHeight
+            $0.horizontalPadding = buttonPadding
+        }
+        hoverToolbar.spacing = spacing
+        refreshButtonTitles()
+
+        hoverToolbarContainer.frame = NSRect(
+            x: sideInset,
+            y: bounds.height - toolbarHeight - topInset,
+            width: max(0, bounds.width - sideInset * 2),
+            height: toolbarHeight
+        )
+        hoverToolbar.frame = NSRect(
+            x: 0,
+            y: 0,
+            width: hoverToolbarContainer.bounds.width,
+            height: hoverToolbarContainer.bounds.height
+        )
+        let closeSize = max(32, min(40, bounds.height * 0.14))
+        closeButton.preferredSize = closeSize
+        closeButton.frame = NSRect(
+            x: bounds.width - sideInset - closeSize,
+            y: bottomInset,
+            width: closeSize,
+            height: closeSize
+        )
+        styleCloseButton()
         updateFramePath()
     }
 
@@ -93,11 +151,21 @@ final class OverlayView: NSView {
         layer?.addSublayer(frameLayer)
 
         [lockButton, ratioButton, controlsButton, hideButton].forEach {
-            $0.bezelStyle = .rounded
-            $0.setButtonType(.momentaryPushIn)
-            $0.font = .systemFont(ofSize: 11, weight: .semibold)
+            $0.isBordered = false
+            $0.setButtonType(.momentaryChange)
+            $0.focusRingType = .none
+            $0.font = .systemFont(ofSize: 13, weight: .semibold)
             $0.contentTintColor = .white
+            $0.wantsLayer = true
         }
+
+        closeButton.isBordered = false
+        closeButton.setButtonType(.momentaryChange)
+        closeButton.focusRingType = .none
+        closeButton.wantsLayer = true
+        closeButton.contentTintColor = .white
+        closeButton.image = closeButtonImage()
+        closeButton.imagePosition = .imageOnly
 
         lockButton.target = self
         lockButton.action = #selector(toggleLock)
@@ -107,24 +175,26 @@ final class OverlayView: NSView {
         controlsButton.action = #selector(openControls)
         hideButton.target = self
         hideButton.action = #selector(hideOverlay)
+        closeButton.target = self
+        closeButton.action = #selector(requestQuit)
 
         hoverToolbar.orientation = .horizontal
-        hoverToolbar.spacing = 6
-        hoverToolbar.edgeInsets = NSEdgeInsets(top: 6, left: 8, bottom: 6, right: 8)
+        hoverToolbar.distribution = .fillEqually
+        hoverToolbar.alignment = .centerY
+        hoverToolbar.spacing = 8
+        hoverToolbar.edgeInsets = NSEdgeInsetsZero
         hoverToolbar.addArrangedSubview(lockButton)
         hoverToolbar.addArrangedSubview(ratioButton)
         hoverToolbar.addArrangedSubview(controlsButton)
         hoverToolbar.addArrangedSubview(hideButton)
 
-        hoverToolbarContainer.wantsLayer = true
-        hoverToolbarContainer.layer?.cornerRadius = 10
-        hoverToolbarContainer.layer?.backgroundColor = NSColor.black.withAlphaComponent(0.42).cgColor
-        hoverToolbarContainer.layer?.borderWidth = 1
-        hoverToolbarContainer.layer?.borderColor = NSColor.white.withAlphaComponent(0.18).cgColor
         hoverToolbarContainer.addSubview(hoverToolbar)
         hoverToolbarContainer.isHidden = true
         hoverToolbarContainer.alphaValue = 0.0
         addSubview(hoverToolbarContainer)
+        closeButton.isHidden = true
+        closeButton.alphaValue = 0.0
+        addSubview(closeButton)
 
         applySettings()
     }
@@ -132,8 +202,11 @@ final class OverlayView: NSView {
     private func setToolbarVisible(_ visible: Bool) {
         hoverToolbarContainer.isHidden = !visible
         hoverToolbarContainer.alphaValue = visible ? 1.0 : 0.0
+        closeButton.isHidden = !visible
+        closeButton.alphaValue = visible ? 1.0 : 0.0
         if visible {
             bringSubviewToFront(hoverToolbarContainer)
+            bringSubviewToFront(closeButton)
         }
     }
 
@@ -174,10 +247,8 @@ final class OverlayView: NSView {
         style(button: ratioButton, active: settings.lockAspectRatio)
         style(button: controlsButton, active: false)
         style(button: hideButton, active: false)
-        lockButton.title = settings.lockFrame ? "已锁定位置" : "锁定位置"
-        ratioButton.title = settings.lockAspectRatio ? "已锁定比例" : "锁定比例"
-        controlsButton.title = "打开设置"
-        hideButton.title = "隐藏窗口"
+        styleCloseButton()
+        refreshButtonTitles()
         let mousePoint = convert(window?.mouseLocationOutsideOfEventStream ?? .zero, from: nil)
         setToolbarVisible(bounds.contains(mousePoint) && !settings.clickThrough)
         updateResizeCursor(for: mousePoint)
@@ -185,11 +256,52 @@ final class OverlayView: NSView {
     }
 
     private func style(button: NSButton, active: Bool) {
-        button.layer?.cornerRadius = 7
-        button.wantsLayer = true
+        button.layer?.cornerRadius = 10
         button.layer?.borderWidth = 1
-        button.layer?.borderColor = (active ? NSColor.systemOrange : NSColor.white.withAlphaComponent(0.18)).cgColor
-        button.layer?.backgroundColor = (active ? NSColor.systemOrange.withAlphaComponent(0.28) : NSColor.white.withAlphaComponent(0.06)).cgColor
+        button.layer?.borderColor = (active ? NSColor.systemOrange.withAlphaComponent(0.65) : NSColor.white.withAlphaComponent(0.22)).cgColor
+        button.layer?.backgroundColor = (active
+            ? NSColor.systemOrange.withAlphaComponent(0.40)
+            : NSColor(calibratedWhite: 0.08, alpha: 0.54)).cgColor
+        button.layer?.shadowColor = NSColor.black.withAlphaComponent(0.22).cgColor
+        button.layer?.shadowOpacity = 1
+        button.layer?.shadowRadius = 8
+        button.layer?.shadowOffset = NSSize(width: 0, height: -1)
+    }
+
+    private func styleCloseButton() {
+        closeButton.layer?.cornerRadius = closeButton.bounds.height / 2
+        closeButton.layer?.borderWidth = 1
+        closeButton.layer?.borderColor = NSColor.white.withAlphaComponent(0.24).cgColor
+        closeButton.layer?.backgroundColor = NSColor(calibratedRed: 0.46, green: 0.13, blue: 0.13, alpha: 0.86).cgColor
+        closeButton.layer?.shadowColor = NSColor.black.withAlphaComponent(0.24).cgColor
+        closeButton.layer?.shadowOpacity = 1
+        closeButton.layer?.shadowRadius = 8
+        closeButton.layer?.shadowOffset = NSSize(width: 0, height: -1)
+    }
+
+    private func refreshButtonTitles() {
+        setButtonTitle(lockButton, title: settings.lockFrame ? "已锁定位置" : "锁定位置")
+        setButtonTitle(ratioButton, title: settings.lockAspectRatio ? "已锁定比例" : "锁定比例")
+        setButtonTitle(controlsButton, title: "打开设置")
+        setButtonTitle(hideButton, title: "隐藏窗口")
+    }
+
+    private func setButtonTitle(_ button: NSButton, title: String) {
+        let attributes: [NSAttributedString.Key: Any] = [
+            .foregroundColor: NSColor.white,
+            .font: NSFont.systemFont(ofSize: toolbarFontSize, weight: .semibold)
+        ]
+        button.attributedTitle = NSAttributedString(string: title, attributes: attributes)
+        button.attributedAlternateTitle = NSAttributedString(string: title, attributes: attributes)
+    }
+
+    private func closeButtonImage() -> NSImage? {
+        guard let image = NSImage(systemSymbolName: "xmark", accessibilityDescription: "关闭程序") else {
+            return nil
+        }
+        image.isTemplate = true
+        image.size = NSSize(width: 11, height: 11)
+        return image
     }
 
     private func updateResizeCursor(for point: NSPoint) {
@@ -236,6 +348,7 @@ final class OverlayView: NSView {
 
     @objc private func openControls() { actionHandler?.showControls() }
     @objc private func hideOverlay() { actionHandler?.hideOverlay() }
+    @objc private func requestQuit() { actionHandler?.requestQuit() }
     @objc private func toggleLock() { actionHandler?.toggleLockFrame() }
     @objc private func toggleRatioLock() { actionHandler?.toggleAspectRatioLock() }
 }
