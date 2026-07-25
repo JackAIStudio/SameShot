@@ -35,6 +35,17 @@ macOS 本地悬浮提示工具，用来在共享屏幕时标记直播右下角�
 
 ## 快速开始
 
+## 安装
+
+### 方式一：下载 DMG（推荐）
+
+1. 打开 [Releases](https://github.com/JackAIStudio/StreamSafeArea/releases) 下载最新的 `StreamSafeArea-x.y.z.dmg`
+2. 打开 DMG，把 `StreamSafeArea.app` 拖到 `Applications`
+3. 首次打开如遇系统安全提示，可在“系统设置 → 隐私与安全性”中允许运行
+
+### 方式二：从源码构建
+
+
 ```bash
 # 克隆仓库
 git clone https://github.com/JackAIStudio/StreamSafeArea.git
@@ -67,7 +78,7 @@ open dist/StreamSafeArea.app
 StreamSafeArea/
 ├── Sources/StreamSafeArea/   # 应用源码
 ├── Package.swift             # Swift Package 定义
-├── build-app.sh              # 打包为 .app 的脚本
+├── build-app.sh              # 打包 .app / DMG，并安装到 /Applications
 ├── LICENSE                   # MIT 许可证
 ├── CONTRIBUTING.md           # 贡献指南
 ├── CODE_OF_CONDUCT.md        # 行为准则
@@ -81,6 +92,7 @@ StreamSafeArea/
 swift build
 ./build-app.sh
 open dist/StreamSafeArea.app
+# 同时会生成 dist/StreamSafeArea-0.1.0.dmg，并安装到 /Applications/StreamSafeArea.app
 ```
 
 更完整的协作约定见 [CONTRIBUTING.md](CONTRIBUTING.md)。
@@ -89,8 +101,7 @@ open dist/StreamSafeArea.app
 
 - 当前为早期公开版本（`0.1.0`），功能以实用为主
 - 暂无自动化 UI 测试
-- 未做 Apple 公证（notarization），从源码自建的 App 可能需要在“隐私与安全性”中手动允许
-- 控制面板中仍保留少量开发期状态信息，后续可继续收敛
+- 未做 Apple 公证（notarization），下载后可能需要在“隐私与安全性”中手动允许
 
 ## 贡献
 

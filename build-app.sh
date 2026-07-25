@@ -3,13 +3,18 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")" && pwd)"
 APP_NAME="StreamSafeArea"
+VERSION="0.1.0"
 BUILD_DIR="$ROOT/.build/release"
-APP_DIR="$ROOT/dist/${APP_NAME}.app"
+DIST_DIR="$ROOT/dist"
+APP_DIR="$DIST_DIR/${APP_NAME}.app"
 MACOS_DIR="$APP_DIR/Contents/MacOS"
 RES_DIR="$APP_DIR/Contents/Resources"
 PLIST="$APP_DIR/Contents/Info.plist"
+DMG_PATH="$DIST_DIR/${APP_NAME}-${VERSION}.dmg"
+STAGE_DIR="$DIST_DIR/dmg-stage"
+INSTALL_APP="/Applications/${APP_NAME}.app"
 
-mkdir -p "$ROOT/dist"
+mkdir -p "$DIST_DIR"
 swift build -c release
 rm -rf "$APP_DIR"
 mkdir -p "$MACOS_DIR" "$RES_DIR"
@@ -48,4 +53,19 @@ cat > "$PLIST" <<'PLIST'
 </plist>
 PLIST
 
+# Create a simple DMG for distribution
+rm -rf "$STAGE_DIR"
+mkdir -p "$STAGE_DIR"
+cp -R "$APP_DIR" "$STAGE_DIR/"
+ln -s /Applications "$STAGE_DIR/Applications"
+rm -f "$DMG_PATH"
+hdiutil create   -volname "$APP_NAME"   -srcfolder "$STAGE_DIR"   -ov   -format UDZO   "$DMG_PATH" >/dev/null
+rm -rf "$STAGE_DIR"
+
+# Install to /Applications for local delivery
+rm -rf "$INSTALL_APP"
+cp -R "$APP_DIR" "$INSTALL_APP"
+
 echo "Built app: $APP_DIR"
+echo "Built dmg: $DMG_PATH"
+echo "Installed app: $INSTALL_APP"

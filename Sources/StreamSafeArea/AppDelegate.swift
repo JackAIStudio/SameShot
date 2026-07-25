@@ -26,7 +26,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OverlayActionHandling 
         window.orderFrontRegardless()
         panelController.bind(window: window, settings: settings, actionHandler: self)
         panelController.setResolutionOptions(cameraController.availableResolutions)
-        panelController.updateDebug(current: settings, saved: lastPersistedSettings)
         buildMenu()
         buildStatusItem()
 
@@ -44,7 +43,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OverlayActionHandling 
         settings = window.settings
         panelController.push(settings: settings)
         scheduleAutosave()
-        panelController.updateDebug(current: settings, saved: lastPersistedSettings)
         if restoreWindow.isVisible {
             restoreWindow.syncVisiblePosition(near: window.frame, on: currentScreen())
         }
@@ -59,7 +57,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OverlayActionHandling 
         settings.lastSavedAt = Date().timeIntervalSince1970
         lastPersistedSettings = settings
         SettingsStore.shared.save(settings)
-        panelController.updateDebug(current: settings, saved: settings)
     }
 
     private func scheduleAutosave() {
