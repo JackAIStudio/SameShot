@@ -41,7 +41,7 @@ macOS 本地悬浮提示工具，用来在共享屏幕时标记直播右下角�
 
 1. 打开 [Releases](https://github.com/JackAIStudio/StreamSafeArea/releases) 下载最新的 `StreamSafeArea-x.y.z.dmg`
 2. 打开 DMG，把 `StreamSafeArea.app` 拖到 `Applications`
-3. 首次打开如遇系统安全提示，可在“系统设置 → 隐私与安全性”中允许运行
+3. 正式分发版已通过 Developer ID 签名与 Apple 公证，通常可直接打开
 
 ### 方式二：从源码构建
 
@@ -101,7 +101,7 @@ open dist/StreamSafeArea.app
 
 - 当前为早期公开版本（`0.1.0`），功能以实用为主
 - 暂无自动化 UI 测试
-- 未做 Apple 公证（notarization），下载后可能需要在“隐私与安全性”中手动允许
+- 分发包已做 Developer ID 签名与 Apple 公证；如本机策略较严，仍可能需要手动允许一次
 
 ## 贡献
 

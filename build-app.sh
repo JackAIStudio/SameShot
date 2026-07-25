@@ -4,22 +4,38 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")" && pwd)"
 APP_NAME="StreamSafeArea"
 VERSION="0.1.0"
+TEAM_ID="92K6CKZ4KM"
+SIGN_IDENTITY="Developer ID Application: jieke wu (${TEAM_ID})"
+NOTARY_PROFILE="StreamSafeArea-notary"
+
+# Build and sign outside Documents/File Provider to avoid com.apple.provenance detritus
+WORK_ROOT="$(mktemp -d /tmp/StreamSafeArea-release.XXXXXX)"
+cleanup() {
+  rm -rf "$WORK_ROOT"
+}
+trap cleanup EXIT
+
 BUILD_DIR="$ROOT/.build/release"
 DIST_DIR="$ROOT/dist"
 APP_DIR="$DIST_DIR/${APP_NAME}.app"
-MACOS_DIR="$APP_DIR/Contents/MacOS"
-RES_DIR="$APP_DIR/Contents/Resources"
-PLIST="$APP_DIR/Contents/Info.plist"
+WORK_APP="$WORK_ROOT/${APP_NAME}.app"
+MACOS_DIR="$WORK_APP/Contents/MacOS"
+RES_DIR="$WORK_APP/Contents/Resources"
+PLIST="$WORK_APP/Contents/Info.plist"
 DMG_PATH="$DIST_DIR/${APP_NAME}-${VERSION}.dmg"
-STAGE_DIR="$DIST_DIR/dmg-stage"
+WORK_DMG="$WORK_ROOT/${APP_NAME}-${VERSION}.dmg"
+STAGE_DIR="$WORK_ROOT/dmg-stage"
 INSTALL_APP="/Applications/${APP_NAME}.app"
+ENTITLEMENTS="$WORK_ROOT/${APP_NAME}.entitlements"
 
 mkdir -p "$DIST_DIR"
 swift build -c release
-rm -rf "$APP_DIR"
+
+rm -rf "$WORK_APP"
 mkdir -p "$MACOS_DIR" "$RES_DIR"
 
-cp "$BUILD_DIR/$APP_NAME" "$MACOS_DIR/$APP_NAME"
+# Copy binary with no resource forks
+ditto --norsrc "$BUILD_DIR/$APP_NAME" "$MACOS_DIR/$APP_NAME"
 chmod +x "$MACOS_DIR/$APP_NAME"
 
 cat > "$PLIST" <<'PLIST'
@@ -53,19 +69,64 @@ cat > "$PLIST" <<'PLIST'
 </plist>
 PLIST
 
-# Create a simple DMG for distribution
-rm -rf "$STAGE_DIR"
-mkdir -p "$STAGE_DIR"
-cp -R "$APP_DIR" "$STAGE_DIR/"
-ln -s /Applications "$STAGE_DIR/Applications"
-rm -f "$DMG_PATH"
-hdiutil create   -volname "$APP_NAME"   -srcfolder "$STAGE_DIR"   -ov   -format UDZO   "$DMG_PATH" >/dev/null
-rm -rf "$STAGE_DIR"
+cat > "$ENTITLEMENTS" <<'ENT'
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>com.apple.security.device.camera</key>
+  <true/>
+</dict>
+</plist>
+ENT
 
-# Install to /Applications for local delivery
+xattr -cr "$WORK_APP" || true
+
+codesign --force --options runtime --timestamp \
+  --entitlements "$ENTITLEMENTS" \
+  --sign "$SIGN_IDENTITY" \
+  "$MACOS_DIR/$APP_NAME"
+
+codesign --force --options runtime --timestamp \
+  --entitlements "$ENTITLEMENTS" \
+  --sign "$SIGN_IDENTITY" \
+  "$WORK_APP"
+
+codesign --verify --deep --strict --verbose=2 "$WORK_APP"
+
+# Stage DMG contents
+mkdir -p "$STAGE_DIR"
+ditto --norsrc "$WORK_APP" "$STAGE_DIR/${APP_NAME}.app"
+ln -s /Applications "$STAGE_DIR/Applications"
+hdiutil create \
+  -volname "$APP_NAME" \
+  -srcfolder "$STAGE_DIR" \
+  -ov \
+  -format UDZO \
+  "$WORK_DMG" >/dev/null
+
+codesign --force --timestamp --sign "$SIGN_IDENTITY" "$WORK_DMG"
+
+xcrun notarytool submit "$WORK_DMG" \
+  --keychain-profile "$NOTARY_PROFILE" \
+  --wait
+
+xcrun stapler staple "$WORK_DMG"
+xcrun stapler validate "$WORK_DMG"
+xcrun stapler staple "$WORK_APP" || true
+xcrun stapler validate "$WORK_APP" || true
+
+# Publish artifacts back to project dist and Applications
+rm -rf "$APP_DIR"
+ditto --norsrc "$WORK_APP" "$APP_DIR"
+cp -f "$WORK_DMG" "$DMG_PATH"
+
 rm -rf "$INSTALL_APP"
-cp -R "$APP_DIR" "$INSTALL_APP"
+ditto --norsrc "$WORK_APP" "$INSTALL_APP"
+xcrun stapler staple "$INSTALL_APP" || true
 
 echo "Built app: $APP_DIR"
 echo "Built dmg: $DMG_PATH"
 echo "Installed app: $INSTALL_APP"
+echo "Signed with: $SIGN_IDENTITY"
+echo "Notarized with profile: $NOTARY_PROFILE"

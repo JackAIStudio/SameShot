@@ -26,6 +26,7 @@
 
 - 移除控制面板开发期调试文案
 - 打包脚本支持生成 DMG，并安装到 `/Applications`
+- 分发包支持 Developer ID 签名与 Apple 公证
 
 ### 文档
 
