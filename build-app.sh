@@ -6,8 +6,8 @@ APP_NAME="SameShot"
 VERSION="0.1.0"
 TEAM_ID="92K6CKZ4KM"
 SIGN_IDENTITY="Developer ID Application: jieke wu (${TEAM_ID})"
-# Existing local keychain profile name from notarization setup
-NOTARY_PROFILE="StreamSafeArea-notary"
+# Local keychain profile name used by notarytool
+NOTARY_PROFILE="SameShot-notary"
 
 # Build and sign outside Documents/File Provider to avoid com.apple.provenance detritus
 WORK_ROOT="$(mktemp -d /tmp/SameShot-release.XXXXXX)"
