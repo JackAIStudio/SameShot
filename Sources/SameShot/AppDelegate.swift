@@ -109,8 +109,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OverlayActionHandling 
 
     private func buildStatusItem() {
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
-        item.button?.title = "SS"
         item.button?.toolTip = "SameShot"
+        if let image = Self.statusBarImage() {
+            item.button?.image = image
+            item.button?.imagePosition = .imageOnly
+            item.button?.title = ""
+        } else {
+            item.button?.title = "SS"
+        }
         let menu = NSMenu()
         menu.addItem(withTitle: "显示控制面板", action: #selector(showControls), keyEquivalent: "")
         menu.addItem(withTitle: "切到线框模式", action: #selector(switchToFrameMode), keyEquivalent: "")
@@ -126,6 +132,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OverlayActionHandling 
         menu.addItem(withTitle: "退出 SameShot", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "")
         item.menu = menu
         statusItem = item
+    }
+
+    private static func statusBarImage() -> NSImage? {
+        let names = ["StatusBarIcon", "logo"]
+        for name in names {
+            if let image = Bundle.main.image(forResource: name) {
+                let icon = image.copy() as! NSImage
+                icon.isTemplate = true
+                icon.size = NSSize(width: 18, height: 18)
+                return icon
+            }
+        }
+        return nil
     }
 
     @objc func showControls() {

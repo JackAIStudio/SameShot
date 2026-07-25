@@ -3,7 +3,7 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")" && pwd)"
 APP_NAME="SameShot"
-VERSION="0.1.0"
+VERSION="0.1.1"
 TEAM_ID="92K6CKZ4KM"
 SIGN_IDENTITY="Developer ID Application: jieke wu (${TEAM_ID})"
 # Local keychain profile name used by notarytool
@@ -35,6 +35,11 @@ swift build -c release
 rm -rf "$WORK_APP"
 mkdir -p "$MACOS_DIR" "$RES_DIR"
 
+# App icon + status bar assets
+if [[ -d "$ROOT/Resources" ]]; then
+  ditto --norsrc "$ROOT/Resources" "$RES_DIR"
+fi
+
 # Copy binary with no resource forks
 ditto --norsrc "$BUILD_DIR/$APP_NAME" "$MACOS_DIR/$APP_NAME"
 chmod +x "$MACOS_DIR/$APP_NAME"
@@ -56,12 +61,14 @@ cat > "$PLIST" <<'PLIST'
   <string>SameShot</string>
   <key>CFBundleDisplayName</key>
   <string>SameShot</string>
+  <key>CFBundleIconFile</key>
+  <string>AppIcon</string>
   <key>CFBundlePackageType</key>
   <string>APPL</string>
   <key>CFBundleShortVersionString</key>
-  <string>0.1.0</string>
+  <string>0.1.1</string>
   <key>CFBundleVersion</key>
-  <string>1</string>
+  <string>2</string>
   <key>LSMinimumSystemVersion</key>
   <string>13.0</string>
   <key>NSHighResolutionCapable</key>

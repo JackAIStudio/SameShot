@@ -20,3 +20,6 @@ xcuserdata/
 # Debug artifacts
 debug-overlay*.png
 *.crash
+
+# Local logo exploration drafts
+/logo-concepts/

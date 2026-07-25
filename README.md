@@ -1,5 +1,9 @@
 # SameShot
 
+<p align="center">
+  <img src="Resources/logo.png" alt="SameShot logo" width="120" />
+</p>
+
 让观众看到的，就是你正在录的。
 
 SameShot 是一个面向视频录制（尤其教学 / 讲解）的 macOS 画中画布局助手。  
@@ -36,7 +40,7 @@ SameShot 走的是另一条路：
 - hover 悬浮快捷按钮
 - 拖动、缩放、吸附右下角
 - 将悬浮窗移动到鼠标所在屏幕
-- 状态栏入口 `SS`
+- 状态栏图标入口
 - 常驻控制面板
 - 预览窗口隐藏与快速恢复
 - 窗口状态自动保存
@@ -85,6 +89,7 @@ open dist/SameShot.app
 ```text
 SameShot/
 ├── Sources/SameShot/   # 应用源码
+├── Resources/          # App Icon / Logo / 状态栏图标
 ├── Package.swift       # Swift Package 定义
 ├── build-app.sh        # 打包 .app / DMG，并安装到 /Applications
 ├── LICENSE
@@ -100,14 +105,14 @@ SameShot/
 swift build
 ./build-app.sh
 open dist/SameShot.app
-# 同时会生成 dist/SameShot-0.1.0.dmg，并安装到 /Applications/SameShot.app
+# 同时会生成 dist/SameShot-0.1.1.dmg，并安装到 /Applications/SameShot.app
 ```
 
 更完整的协作约定见 [CONTRIBUTING.md](CONTRIBUTING.md)。
 
 ## 已知限制
 
-- 当前为早期版本（`0.1.0`），功能以实用为主
+- 当前为早期版本（`0.1.1`），功能以实用为主
 - 暂无自动化 UI 测试
 - 分发包已做 Developer ID 签名与 Apple 公证；如本机策略较严，仍可能需要手动允许一次
 

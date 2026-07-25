@@ -2,6 +2,19 @@
 
 本项目遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 的精神，版本号尽量遵循语义化版本。
 
+## [0.1.1] - 2026-07-25
+
+### 新增
+
+- 统一极简品牌 Logo（嵌套双框：屏幕 + 画中画）
+- 黑色底板 macOS App Icon（`AppIcon.icns`）
+- 状态栏使用模板化 Logo 图标（资源缺失时回退为 `SS`）
+- 打包脚本自动嵌入 `Resources/` 图标资源
+
+### 变更
+
+- README 展示项目 Logo，并补充 `Resources/` 目录说明
+
 ## [0.1.0] - 2026-07-25
 
 ### 新增
