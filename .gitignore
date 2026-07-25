@@ -1,12 +1,22 @@
+# macOS
 .DS_Store
+
+# Swift / SPM
 /.build
-/dist
 /Packages
-xcuserdata/
-DerivedData/
 .swiftpm/configuration/registries.json
 .swiftpm/xcode/package.xcworkspace/contents.xcworkspacedata
-.netrc
+DerivedData/
+xcuserdata/
 
+# App packaging output
+/dist
+
+# Local secrets / credentials
+.netrc
+.env
+.env.*
+
+# Debug artifacts
 debug-overlay*.png
 *.crash

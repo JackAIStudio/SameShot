@@ -27,7 +27,7 @@ cat > "$PLIST" <<'PLIST'
   <key>CFBundleExecutable</key>
   <string>StreamSafeArea</string>
   <key>CFBundleIdentifier</key>
-  <string>ai.openclaw.StreamSafeArea</string>
+  <string>studio.jackai.StreamSafeArea</string>
   <key>CFBundleInfoDictionaryVersion</key>
   <string>6.0</string>
   <key>CFBundleName</key>
