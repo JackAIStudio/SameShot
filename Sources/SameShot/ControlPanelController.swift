@@ -161,7 +161,7 @@ final class ControlPanelController: NSWindowController {
 
     private func setupUI() {
         guard let window else { return }
-        window.title = "StreamSafeArea 控制面板"
+        window.title = "SameShot 控制面板"
 
         let root = NSView(frame: window.contentView!.bounds)
         root.autoresizingMask = [.width, .height]

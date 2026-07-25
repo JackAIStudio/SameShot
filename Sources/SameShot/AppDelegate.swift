@@ -103,14 +103,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OverlayActionHandling 
         appMenu.addItem(withTitle: "切换锁定视频比例", action: #selector(toggleAspectRatioLock), keyEquivalent: "r")
         appMenu.addItem(withTitle: "吸附到右下角", action: #selector(snapToBottomRight), keyEquivalent: "b")
         appMenu.addItem(NSMenuItem.separator())
-        appMenu.addItem(withTitle: "退出 StreamSafeArea", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+        appMenu.addItem(withTitle: "退出 SameShot", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         NSApp.mainMenu = mainMenu
     }
 
     private func buildStatusItem() {
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
-        item.button?.title = "SSA"
-        item.button?.toolTip = "StreamSafeArea"
+        item.button?.title = "SS"
+        item.button?.toolTip = "SameShot"
         let menu = NSMenu()
         menu.addItem(withTitle: "显示控制面板", action: #selector(showControls), keyEquivalent: "")
         menu.addItem(withTitle: "切到线框模式", action: #selector(switchToFrameMode), keyEquivalent: "")
@@ -123,7 +123,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OverlayActionHandling 
         menu.addItem(withTitle: "隐藏悬浮窗", action: #selector(hideOverlay), keyEquivalent: "")
         menu.addItem(withTitle: "显示悬浮窗", action: #selector(showOverlay), keyEquivalent: "")
         menu.addItem(NSMenuItem.separator())
-        menu.addItem(withTitle: "退出 StreamSafeArea", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "")
+        menu.addItem(withTitle: "退出 SameShot", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "")
         item.menu = menu
         statusItem = item
     }
@@ -149,7 +149,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OverlayActionHandling 
         NSApp.activate(ignoringOtherApps: true)
         let alert = NSAlert()
         alert.alertStyle = .warning
-        alert.messageText = "确认关闭 StreamSafeArea？"
+        alert.messageText = "确认关闭 SameShot？"
         alert.informativeText = "关闭后会退出程序，视频预览和恢复按钮都会消失。"
         alert.addButton(withTitle: "关闭程序")
         alert.addButton(withTitle: "取消")

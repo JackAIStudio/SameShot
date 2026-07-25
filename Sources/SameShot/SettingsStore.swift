@@ -4,7 +4,7 @@ import Foundation
 final class SettingsStore {
     static let shared = SettingsStore()
     private let defaults = UserDefaults.standard
-    private let key = "StreamSafeArea.overlaySettings"
+    private let key = "SameShot.overlaySettings"
 
     func load() -> OverlaySettings {
         guard let data = defaults.data(forKey: key),

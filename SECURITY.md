@@ -4,7 +4,7 @@
 
 当前公开维护的是 `main` 分支上的最新版本。
 
-StreamSafeArea 是本地 macOS 应用，主要处理：
+SameShot 是本地 macOS 应用，主要处理：
 
 - 本地摄像头预览
 - 悬浮窗位置与尺寸

@@ -2,14 +2,15 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")" && pwd)"
-APP_NAME="StreamSafeArea"
+APP_NAME="SameShot"
 VERSION="0.1.0"
 TEAM_ID="92K6CKZ4KM"
 SIGN_IDENTITY="Developer ID Application: jieke wu (${TEAM_ID})"
+# Existing local keychain profile name from notarization setup
 NOTARY_PROFILE="StreamSafeArea-notary"
 
 # Build and sign outside Documents/File Provider to avoid com.apple.provenance detritus
-WORK_ROOT="$(mktemp -d /tmp/StreamSafeArea-release.XXXXXX)"
+WORK_ROOT="$(mktemp -d /tmp/SameShot-release.XXXXXX)"
 cleanup() {
   rm -rf "$WORK_ROOT"
 }
@@ -46,13 +47,15 @@ cat > "$PLIST" <<'PLIST'
   <key>CFBundleDevelopmentRegion</key>
   <string>zh_CN</string>
   <key>CFBundleExecutable</key>
-  <string>StreamSafeArea</string>
+  <string>SameShot</string>
   <key>CFBundleIdentifier</key>
-  <string>studio.jackai.StreamSafeArea</string>
+  <string>studio.jackai.SameShot</string>
   <key>CFBundleInfoDictionaryVersion</key>
   <string>6.0</string>
   <key>CFBundleName</key>
-  <string>StreamSafeArea</string>
+  <string>SameShot</string>
+  <key>CFBundleDisplayName</key>
+  <string>SameShot</string>
   <key>CFBundlePackageType</key>
   <string>APPL</string>
   <key>CFBundleShortVersionString</key>
@@ -64,7 +67,7 @@ cat > "$PLIST" <<'PLIST'
   <key>NSHighResolutionCapable</key>
   <true/>
   <key>NSCameraUsageDescription</key>
-  <string>StreamSafeArea 需要访问摄像头，用于在悬浮窗中显示人物视频预览，帮助直播时避免遮挡主要内容。</string>
+  <string>SameShot 需要访问摄像头，用于在录制画面中显示人物画中画预览，帮助你在录制时及时发现并避开遮挡。</string>
 </dict>
 </plist>
 PLIST

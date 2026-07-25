@@ -1,6 +1,6 @@
 # 贡献指南
 
-感谢你关注 StreamSafeArea。下面是参与开发前建议先了解的约定。
+感谢你关注 SameShot。下面是参与开发前建议先了解的约定。
 
 ## 开发环境
 
@@ -18,7 +18,7 @@ swift build
 ./build-app.sh
 
 # 启动
-open dist/StreamSafeArea.app
+open dist/SameShot.app
 ```
 
 ## 建议的开发流程

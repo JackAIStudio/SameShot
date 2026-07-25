@@ -2,17 +2,17 @@
 import PackageDescription
 
 let package = Package(
-    name: "StreamSafeArea",
+    name: "SameShot",
     platforms: [
         .macOS(.v13)
     ],
     products: [
-        .executable(name: "StreamSafeArea", targets: ["StreamSafeArea"])
+        .executable(name: "SameShot", targets: ["SameShot"])
     ],
     targets: [
         .executableTarget(
-            name: "StreamSafeArea",
-            path: "Sources/StreamSafeArea"
+            name: "SameShot",
+            path: "Sources/SameShot"
         )
     ]
 )
