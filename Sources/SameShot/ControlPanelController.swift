@@ -4,14 +4,12 @@ import AppKit
 final class ControlPanelController: NSWindowController {
     private weak var scrollViewRef: NSScrollView?
 
-    private let captureModePopup = NSPopUpButton(frame: .zero, pullsDown: false)
-    private let resolutionPopup = NSPopUpButton(frame: .zero, pullsDown: false)
-    private let frameRatePopup = NSPopUpButton(frame: .zero, pullsDown: false)
-    private let customCaptureStack = NSStackView()
+    private let captureQualityPopup = NSPopUpButton(frame: .zero, pullsDown: false)
     private let sourceInfoLabel = NSTextField(wrappingLabelWithString: "")
+    private let captureHintLabel = NSTextField(wrappingLabelWithString: "")
 
     private let sizePresetControl = NSSegmentedControl(
-        labels: ["小", "中", "大", "自定义"],
+        labels: ["小 240", "中 320", "大 480", "自定义"],
         trackingMode: .selectOne,
         target: nil,
         action: nil
@@ -20,8 +18,10 @@ final class ControlPanelController: NSWindowController {
     private weak var customSizeRow: NSView?
     private let widthField = NSTextField(string: "")
     private let heightField = NSTextField(string: "")
+    private let sizeInfoLabel = NSTextField(wrappingLabelWithString: "")
     private let aspectRatioPopup = NSPopUpButton(frame: .zero, pullsDown: false)
     private let scalingModePopup = NSPopUpButton(frame: .zero, pullsDown: false)
+    private let scalingHintLabel = NSTextField(wrappingLabelWithString: "")
 
     private let cornerSlider = NSSlider(value: 18, minValue: 0, maxValue: 40, target: nil, action: nil)
     private let mirrorButton = NSButton(checkboxWithTitle: "镜像画面", target: nil, action: nil)
@@ -30,7 +30,6 @@ final class ControlPanelController: NSWindowController {
     private weak var cameraController: CameraSessionController?
     private var settings = OverlaySettings.defaults
     private var resolutionOptions: [CameraResolutionOption] = [.auto]
-    private var displayedFrameRates: [Double] = []
 
     convenience init() {
         let rect = NSRect(x: 0, y: 0, width: 520, height: 600)
@@ -62,23 +61,21 @@ final class ControlPanelController: NSWindowController {
 
     func setResolutionOptions(_ options: [CameraResolutionOption]) {
         resolutionOptions = options
-        reloadResolutionMenu()
+        reloadCaptureQualityMenu()
         push(settings: settings)
     }
 
     func push(settings: OverlaySettings) {
         self.settings = settings
 
-        let usesAutomaticCapture = settings.cameraResolutionID == CameraResolutionOption.auto.id
-        captureModePopup.selectItem(at: usesAutomaticCapture ? 0 : 1)
-        customCaptureStack.isHidden = usesAutomaticCapture
-        selectCurrentResolution()
-        reloadFrameRateMenu()
+        selectCurrentCaptureQuality()
+        updateCaptureHint()
         updateSourceInfo()
 
         widthField.stringValue = String(Int(settings.width.rounded()))
         heightField.stringValue = String(Int(settings.height.rounded()))
         updateSizePresetSelection()
+        updateSizeInfo()
 
         if let index = OverlayAspectRatio.allCases.firstIndex(of: settings.aspectRatio) {
             aspectRatioPopup.selectItem(at: index)
@@ -86,58 +83,46 @@ final class ControlPanelController: NSWindowController {
         if let index = VideoScalingMode.allCases.firstIndex(of: settings.videoScalingMode) {
             scalingModePopup.selectItem(at: index)
         }
+        updateScalingHint()
 
         cornerSlider.doubleValue = settings.cornerRadius
         mirrorButton.state = settings.mirrorCamera ? .on : .off
     }
 
-    private var customResolutionOptions: [CameraResolutionOption] {
-        resolutionOptions.filter { $0.id != CameraResolutionOption.auto.id }
-    }
-
-    private func reloadResolutionMenu() {
-        resolutionPopup.removeAllItems()
-        resolutionPopup.addItems(withTitles: customResolutionOptions.map(\ .label))
-        selectCurrentResolution()
-    }
-
-    private func selectCurrentResolution() {
-        guard !customResolutionOptions.isEmpty else { return }
-        if let index = customResolutionOptions.firstIndex(where: { $0.id == settings.cameraResolutionID }) {
-            resolutionPopup.selectItem(at: index)
-        } else if let preferredIndex = preferredResolutionIndex() {
-            resolutionPopup.selectItem(at: preferredIndex)
+    private var displayedCaptureQualityOptions: [CameraResolutionOption] {
+        var options: [CameraResolutionOption] = [.auto]
+        let dimensions: [(Int32, Int32)] = [
+            (640, 480),
+            (1280, 720),
+            (1920, 1080)
+        ]
+        for (width, height) in dimensions {
+            if let option = resolutionOptions.first(where: {
+                $0.width == width && $0.height == height
+            }) {
+                options.append(option)
+            }
         }
+        return options
     }
 
-    private func preferredResolutionIndex() -> Int? {
-        let options = customResolutionOptions
-        guard !options.isEmpty else { return nil }
-        return options.firstIndex(where: { $0.width == 1920 && $0.height == 1080 }) ?? 0
+    private func reloadCaptureQualityMenu() {
+        captureQualityPopup.removeAllItems()
+        captureQualityPopup.addItems(withTitles: displayedCaptureQualityOptions.map(Self.captureQualityTitle))
+        selectCurrentCaptureQuality()
     }
 
-    private func selectedResolutionOption() -> CameraResolutionOption? {
-        let index = resolutionPopup.indexOfSelectedItem
-        guard index >= 0, index < customResolutionOptions.count else { return nil }
-        return customResolutionOptions[index]
+    private func selectCurrentCaptureQuality() {
+        let index = displayedCaptureQualityOptions.firstIndex {
+            $0.id == settings.cameraResolutionID
+        } ?? 0
+        captureQualityPopup.selectItem(at: index)
     }
 
-    private func reloadFrameRateMenu() {
-        let option =
-            customResolutionOptions.first(where: { $0.id == settings.cameraResolutionID }) ??
-            selectedResolutionOption()
-        displayedFrameRates = option?.frameRates ?? []
-        frameRatePopup.removeAllItems()
-        frameRatePopup.addItems(withTitles: displayedFrameRates.map(Self.frameRateTitle))
-
-        guard !displayedFrameRates.isEmpty else { return }
-        let requestedRate = settings.cameraFrameRate ?? option?.preferredFrameRate
-        if let requestedRate,
-           let index = displayedFrameRates.firstIndex(where: { abs($0 - requestedRate) < 0.2 }) {
-            frameRatePopup.selectItem(at: index)
-        } else {
-            frameRatePopup.selectItem(at: 0)
-        }
+    private func selectedCaptureQualityOption() -> CameraResolutionOption? {
+        let index = captureQualityPopup.indexOfSelectedItem
+        guard index >= 0, index < displayedCaptureQualityOptions.count else { return nil }
+        return displayedCaptureQualityOptions[index]
     }
 
     private func updateSourceInfo() {
@@ -154,6 +139,27 @@ final class ControlPanelController: NSWindowController {
             sourceInfoLabel.stringValue = "当前输入：尚未获得摄像头权限"
         case .available, .unavailable:
             sourceInfoLabel.stringValue = "当前输入：未检测到可用摄像头"
+        }
+    }
+
+    private func updateCaptureHint() {
+        let selectedOption = resolutionOptions.first {
+            $0.id == settings.cameraResolutionID
+        }
+        captureHintLabel.stringValue = switch (selectedOption?.width, selectedOption?.height) {
+        case (640, 480): "更省资源，适合小号画中画"
+        case (1280, 720): "清晰度与性能均衡，适合大多数画中画"
+        case (1920, 1080): "画面更清晰，适合大号画中画"
+        default: "优先使用 720p · 30 fps，不支持时自动选择接近规格"
+        }
+    }
+
+    private static func captureQualityTitle(_ option: CameraResolutionOption) -> String {
+        switch (option.width, option.height) {
+        case (640, 480): "480p（更省资源）"
+        case (1280, 720): "720p（均衡）"
+        case (1920, 1080): "1080p（更清晰）"
+        default: "自动（推荐：720p / 30 fps）"
         }
     }
 
@@ -210,15 +216,8 @@ final class ControlPanelController: NSWindowController {
         configureControls()
 
         stack.addArrangedSubview(sectionLabel("摄像头"))
-        stack.addArrangedSubview(formRow(title: "采集设置", control: captureModePopup))
-
-        customCaptureStack.orientation = .vertical
-        customCaptureStack.alignment = .leading
-        customCaptureStack.spacing = 10
-        customCaptureStack.detachesHiddenViews = true
-        customCaptureStack.addArrangedSubview(formRow(title: "分辨率", control: resolutionPopup))
-        customCaptureStack.addArrangedSubview(formRow(title: "帧率", control: frameRatePopup))
-        stack.addArrangedSubview(customCaptureStack)
+        stack.addArrangedSubview(formRow(title: "摄像头画质", control: captureQualityPopup))
+        stack.addArrangedSubview(formRow(title: "", control: captureHintLabel))
 
         sourceInfoLabel.font = .systemFont(ofSize: 12)
         sourceInfoLabel.textColor = .secondaryLabelColor
@@ -238,11 +237,14 @@ final class ControlPanelController: NSWindowController {
         let customSizeRow = formRow(title: "自定义", control: customSizeStack)
         self.customSizeRow = customSizeRow
         stack.addArrangedSubview(customSizeRow)
+        stack.addArrangedSubview(formRow(title: "", control: sizeInfoLabel))
 
         stack.addArrangedSubview(formRow(title: "比例", control: aspectRatioPopup))
         let scalingModeRow = formRow(title: "显示方式", control: scalingModePopup)
         stack.addArrangedSubview(scalingModeRow)
-        stack.setCustomSpacing(24, after: scalingModeRow)
+        let scalingHintRow = formRow(title: "", control: scalingHintLabel)
+        stack.addArrangedSubview(scalingHintRow)
+        stack.setCustomSpacing(24, after: scalingHintRow)
 
         stack.addArrangedSubview(sectionLabel("外观"))
         stack.addArrangedSubview(formRow(title: "圆角", control: cornerSlider))
@@ -250,14 +252,8 @@ final class ControlPanelController: NSWindowController {
     }
 
     private func configureControls() {
-        captureModePopup.addItems(withTitles: ["自动（推荐）", "自定义"])
-        captureModePopup.target = self
-        captureModePopup.action = #selector(changeCaptureMode)
-
-        resolutionPopup.target = self
-        resolutionPopup.action = #selector(changeResolution)
-        frameRatePopup.target = self
-        frameRatePopup.action = #selector(changeFrameRate)
+        captureQualityPopup.target = self
+        captureQualityPopup.action = #selector(changeCaptureQuality)
 
         sizePresetControl.target = self
         sizePresetControl.action = #selector(changeSizePreset)
@@ -287,7 +283,15 @@ final class ControlPanelController: NSWindowController {
         mirrorButton.target = self
         mirrorButton.action = #selector(toggleMirror)
 
-        [captureModePopup, resolutionPopup, frameRatePopup, aspectRatioPopup, scalingModePopup].forEach {
+        [captureHintLabel, sourceInfoLabel, sizeInfoLabel, scalingHintLabel].forEach {
+            $0.font = .systemFont(ofSize: 12)
+            $0.textColor = .secondaryLabelColor
+            $0.preferredMaxLayoutWidth = 280
+            $0.translatesAutoresizingMaskIntoConstraints = false
+            $0.widthAnchor.constraint(equalToConstant: 280).isActive = true
+        }
+
+        [captureQualityPopup, aspectRatioPopup, scalingModePopup].forEach {
             $0.translatesAutoresizingMaskIntoConstraints = false
             $0.widthAnchor.constraint(equalToConstant: 280).isActive = true
         }
@@ -305,6 +309,29 @@ final class ControlPanelController: NSWindowController {
         } else {
             sizePresetControl.selectedSegment = 3
             customSizeRow?.isHidden = false
+        }
+    }
+
+    private func updateSizeInfo() {
+        let width = Int(settings.width.rounded())
+        let height = Int(settings.height.rounded())
+        let presetDescription = switch sizePresetControl.selectedSegment {
+        case 0: " · 小号"
+        case 1: " · 中号（默认）"
+        case 2: " · 大号"
+        default: ""
+        }
+        sizeInfoLabel.stringValue = "当前尺寸：\(width) × \(height)\(presetDescription)；预设数字为窗口宽度"
+    }
+
+    private func updateScalingHint() {
+        if settings.aspectRatio == .source {
+            scalingHintLabel.stringValue = "跟随摄像头比例时，通常不会发生裁切或留边"
+            return
+        }
+        scalingHintLabel.stringValue = switch settings.videoScalingMode {
+        case .fill: "窗口没有留边；比例不一致时会裁掉画面边缘"
+        case .fit: "保留完整画面；比例不一致时可能出现留边"
         }
     }
 
@@ -351,44 +378,15 @@ final class ControlPanelController: NSWindowController {
         return row
     }
 
-    @objc private func changeCaptureMode() {
-        if captureModePopup.indexOfSelectedItem == 0 {
-            mutateSettings {
-                $0.cameraResolutionID = CameraResolutionOption.auto.id
-                $0.cameraFrameRate = nil
-            }
-            return
-        }
-
-        guard let option = selectedResolutionOption() ??
-                preferredResolutionIndex().map({ customResolutionOptions[$0] }) else {
-            captureModePopup.selectItem(at: 0)
-            return
-        }
+    @objc private func changeCaptureQuality() {
+        guard let option = selectedCaptureQualityOption() else { return }
         mutateSettings {
             $0.cameraResolutionID = option.id
-            $0.cameraFrameRate = option.preferredFrameRate
+            $0.cameraFrameRate = option.id == CameraResolutionOption.auto.id
+                ? nil
+                : option.preferredFrameRate
         }
-    }
-
-    @objc private func changeResolution() {
-        guard let option = selectedResolutionOption() else { return }
-        mutateSettings {
-            $0.cameraResolutionID = option.id
-            if let currentRate = $0.cameraFrameRate,
-               let matchingFrameRate = option.matchingFrameRate(for: currentRate) {
-                $0.cameraFrameRate = matchingFrameRate
-            } else {
-                $0.cameraFrameRate = option.preferredFrameRate
-            }
-        }
-    }
-
-    @objc private func changeFrameRate() {
-        let index = frameRatePopup.indexOfSelectedItem
-        guard index >= 0, index < displayedFrameRates.count else { return }
-        let frameRate = displayedFrameRates[index]
-        mutateSettings { $0.cameraFrameRate = frameRate }
+        alignWindowToCameraSourceIfNeeded()
     }
 
     @objc private func changeSizePreset() {
@@ -471,6 +469,22 @@ final class ControlPanelController: NSWindowController {
         var next = window.settings
         body(&next)
         window.apply(next, preservePosition: preservePosition)
+        push(settings: window.settings)
+    }
+
+    private func alignWindowToCameraSourceIfNeeded() {
+        guard let window = overlayWindow,
+              window.settings.aspectRatio == .source,
+              let info = cameraController?.activeFormatInfo,
+              info.height > 0 else {
+            return
+        }
+        var next = window.settings
+        let sourceRatio = Double(info.width) / Double(info.height)
+        let alignedHeight = max(80, next.width / sourceRatio)
+        guard abs(next.height - alignedHeight) >= 0.5 else { return }
+        next.height = alignedHeight
+        window.apply(next, preservePosition: false)
         push(settings: window.settings)
     }
 

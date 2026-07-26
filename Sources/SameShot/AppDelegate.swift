@@ -15,7 +15,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OverlayVisibilityHandl
     func applicationDidFinishLaunching(_ notification: Notification) {
         let resolved = resolveInitialSettings(settings)
         cameraController.refreshAvailableResolutions()
-        settings = sanitizedCameraSettings(resolved)
+        settings = settingsAlignedToCameraSource(sanitizedCameraSettings(resolved))
 
         window = OverlayWindow(settings: settings, cameraController: cameraController)
         restoreWindow = RestoreOverlayWindow(actionHandler: self)
@@ -57,10 +57,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OverlayVisibilityHandl
     @objc private func syncCameraState() {
         cameraController.refreshAvailableResolutions()
         let currentSettings = window.settings
-        let sanitizedSettings = sanitizedCameraSettings(currentSettings)
+        let sanitizedSettings = settingsAlignedToCameraSource(sanitizedCameraSettings(currentSettings))
         if sanitizedSettings.cameraResolutionID != currentSettings.cameraResolutionID ||
-            sanitizedSettings.cameraFrameRate != currentSettings.cameraFrameRate {
-            window.apply(sanitizedSettings)
+            sanitizedSettings.cameraFrameRate != currentSettings.cameraFrameRate ||
+            abs(sanitizedSettings.height - currentSettings.height) >= 0.5 {
+            window.apply(sanitizedSettings, preservePosition: false)
         }
         panelController.setResolutionOptions(cameraController.availableResolutions)
     }
@@ -69,10 +70,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OverlayVisibilityHandl
         guard window != nil else { return }
         cameraController.refreshAvailableResolutions()
         let currentSettings = window.settings
-        let sanitizedSettings = sanitizedCameraSettings(currentSettings)
+        let sanitizedSettings = settingsAlignedToCameraSource(sanitizedCameraSettings(currentSettings))
         if sanitizedSettings.cameraResolutionID != currentSettings.cameraResolutionID ||
-            sanitizedSettings.cameraFrameRate != currentSettings.cameraFrameRate {
-            window.apply(sanitizedSettings)
+            sanitizedSettings.cameraFrameRate != currentSettings.cameraFrameRate ||
+            abs(sanitizedSettings.height - currentSettings.height) >= 0.5 {
+            window.apply(sanitizedSettings, preservePosition: false)
         }
         panelController.setResolutionOptions(cameraController.availableResolutions)
     }
@@ -84,6 +86,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OverlayVisibilityHandl
 
     private func persistCurrentWindowState() {
         autosaveTask?.cancel()
+        guard let window else { return }
         settings = window.settings
         if let screenNumber = window.screen?.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber {
             settings.targetScreenID = String(screenNumber.intValue)
@@ -129,7 +132,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OverlayVisibilityHandl
             updated.cameraFrameRate = nil
             return updated
         }
-        guard let option = cameraController.availableResolutions.first(where: { $0.id == current.cameraResolutionID }) else {
+        guard let option = cameraController.availableResolutions.first(where: {
+            $0.id == current.cameraResolutionID
+        }),
+        option.isPictureInPictureQualityPreset else {
             updated.cameraResolutionID = CameraResolutionOption.auto.id
             updated.cameraFrameRate = nil
             return updated
@@ -140,6 +146,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OverlayVisibilityHandl
         } else {
             updated.cameraFrameRate = option.preferredFrameRate
         }
+        return updated
+    }
+
+    private func settingsAlignedToCameraSource(_ current: OverlaySettings) -> OverlaySettings {
+        guard current.aspectRatio == .source,
+              let info = cameraController.activeFormatInfo,
+              info.height > 0 else {
+            return current
+        }
+        var updated = current
+        let sourceRatio = Double(info.width) / Double(info.height)
+        updated.height = max(80, updated.width / sourceRatio)
         return updated
     }
 

@@ -136,7 +136,16 @@ final class CameraSessionController: NSObject {
     private func applyCurrentCaptureConfiguration() {
         guard isAvailable, let device = currentDevice else { return }
 
-        guard currentResolutionID != CameraResolutionOption.auto.id else {
+        let option: CameraResolutionOption?
+        if currentResolutionID == CameraResolutionOption.auto.id {
+            option = Self.automaticResolutionOption(from: availableResolutions)
+        } else {
+            option = availableResolutions.first(where: { $0.id == currentResolutionID })
+        }
+
+        guard let option,
+              let width = option.width,
+              let height = option.height else {
             session.beginConfiguration()
             if session.canSetSessionPreset(.high) {
                 session.sessionPreset = .high
@@ -145,11 +154,6 @@ final class CameraSessionController: NSObject {
             return
         }
 
-        guard let option = availableResolutions.first(where: { $0.id == currentResolutionID }),
-              let width = option.width,
-              let height = option.height else {
-            return
-        }
         let requestedFrameRate =
             currentFrameRate.flatMap(option.matchingFrameRate) ??
             option.preferredFrameRate
@@ -159,6 +163,10 @@ final class CameraSessionController: NSObject {
                 width: width,
                 height: height,
                 frameRate: requestedFrameRate
+              ),
+              let duration = Self.supportedFrameDuration(
+                for: requestedFrameRate,
+                in: format
               ) else {
             return
         }
@@ -167,11 +175,39 @@ final class CameraSessionController: NSObject {
             try device.lockForConfiguration()
             defer { device.unlockForConfiguration() }
             device.activeFormat = format
-            let duration = CMTime(seconds: 1 / requestedFrameRate, preferredTimescale: 1_000_000_000)
             device.activeVideoMinFrameDuration = duration
             device.activeVideoMaxFrameDuration = duration
         } catch {
             return
+        }
+    }
+
+    static func automaticResolutionOption(
+        from options: [CameraResolutionOption]
+    ) -> CameraResolutionOption? {
+        let customOptions = options.filter { $0.id != CameraResolutionOption.auto.id }
+        if let preferred = customOptions.first(where: {
+            $0.width == 1280 && $0.height == 720
+        }) {
+            return preferred
+        }
+
+        let targetWidth = 1280.0
+        let targetHeight = 720.0
+        return customOptions.min { lhs, rhs in
+            guard let lhsWidth = lhs.width,
+                  let lhsHeight = lhs.height,
+                  let rhsWidth = rhs.width,
+                  let rhsHeight = rhs.height else {
+                return false
+            }
+            let lhsDistance =
+                abs(Double(lhsWidth) - targetWidth) +
+                abs(Double(lhsHeight) - targetHeight)
+            let rhsDistance =
+                abs(Double(rhsWidth) - targetWidth) +
+                abs(Double(rhsHeight) - targetHeight)
+            return lhsDistance < rhsDistance
         }
     }
 
@@ -253,6 +289,44 @@ final class CameraSessionController: NSObject {
                 let rhsMax = rhs.videoSupportedFrameRateRanges.map(\ .maxFrameRate).max() ?? .greatestFiniteMagnitude
                 return abs(lhsMax - frameRate) < abs(rhsMax - frameRate)
             }
+    }
+
+    private static func supportedFrameDuration(
+        for frameRate: Double,
+        in format: AVCaptureDevice.Format
+    ) -> CMTime? {
+        guard frameRate.isFinite, frameRate > 0,
+              let range = format.videoSupportedFrameRateRanges.first(where: {
+                  frameRate >= $0.minFrameRate - 0.2 &&
+                      frameRate <= $0.maxFrameRate + 0.2
+              }) else {
+            return nil
+        }
+
+        return clampedFrameDuration(
+            for: frameRate,
+            minimum: range.minFrameDuration,
+            maximum: range.maxFrameDuration
+        )
+    }
+
+    static func clampedFrameDuration(
+        for frameRate: Double,
+        minimum: CMTime,
+        maximum: CMTime
+    ) -> CMTime? {
+        guard frameRate.isFinite, frameRate > 0 else { return nil }
+        var duration = CMTime(
+            seconds: 1 / frameRate,
+            preferredTimescale: 1_000_000
+        )
+        if CMTimeCompare(duration, minimum) < 0 {
+            duration = minimum
+        }
+        if CMTimeCompare(duration, maximum) > 0 {
+            duration = maximum
+        }
+        return duration
     }
 
     private static func frameRatesEqual(_ lhs: Double?, _ rhs: Double?) -> Bool {

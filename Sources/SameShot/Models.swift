@@ -27,6 +27,18 @@ struct CameraResolutionOption: Codable, Hashable {
     var preferredFrameRate: Double? {
         frameRates.min(by: { abs($0 - 30) < abs($1 - 30) })
     }
+
+    var isPictureInPictureQualityPreset: Bool {
+        if id == Self.auto.id {
+            return true
+        }
+        return switch (width, height) {
+        case (640, 480), (1280, 720), (1920, 1080):
+            true
+        default:
+            false
+        }
+    }
 }
 
 struct CameraActiveFormatInfo: Equatable {
@@ -44,10 +56,10 @@ enum OverlayAspectRatio: String, Codable, CaseIterable {
 
     var title: String {
         switch self {
-        case .source: "跟随摄像头"
-        case .sixteenNine: "16:9"
-        case .fourThree: "4:3"
-        case .square: "1:1"
+        case .source: "跟随摄像头（推荐）"
+        case .sixteenNine: "16:9（横向）"
+        case .fourThree: "4:3（传统）"
+        case .square: "1:1（方形）"
         case .free: "自由调整"
         }
     }
@@ -68,8 +80,8 @@ enum VideoScalingMode: String, Codable, CaseIterable {
 
     var title: String {
         switch self {
-        case .fill: "填满（可能裁切）"
-        case .fit: "完整显示"
+        case .fill: "铺满窗口（可能裁切）"
+        case .fit: "完整画面（可能留边）"
         }
     }
 }
