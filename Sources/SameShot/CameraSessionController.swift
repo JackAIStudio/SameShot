@@ -22,6 +22,25 @@ final class CameraSessionController: NSObject {
         availability == .available
     }
 
+    var activeFormatInfo: CameraActiveFormatInfo? {
+        guard isAvailable, let device = currentDevice else { return nil }
+        let dimensions = CMVideoFormatDescriptionGetDimensions(device.activeFormat.formatDescription)
+        let activeFrameDuration = CMTimeGetSeconds(device.activeVideoMinFrameDuration)
+        let supportedMaxFPS = device.activeFormat.videoSupportedFrameRateRanges
+            .map(\ .maxFrameRate)
+            .max()
+        let maxFPS = if activeFrameDuration.isFinite, activeFrameDuration > 0 {
+            1 / activeFrameDuration
+        } else {
+            supportedMaxFPS
+        }
+        return CameraActiveFormatInfo(
+            width: dimensions.width,
+            height: dimensions.height,
+            maxFPS: maxFPS
+        )
+    }
+
     func attach(to previewLayer: AVCaptureVideoPreviewLayer, resolutionID: String) {
         configureIfNeeded()
         updateResolutionIfNeeded(resolutionID)

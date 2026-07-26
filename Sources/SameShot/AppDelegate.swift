@@ -22,7 +22,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OverlayVisibilityHandl
         window = OverlayWindow(settings: settings, cameraController: cameraController)
         restoreWindow = RestoreOverlayWindow(actionHandler: self)
         window.orderFrontRegardless()
-        panelController.bind(window: window, settings: settings, actionHandler: self)
+        panelController.bind(
+            window: window,
+            settings: settings,
+            cameraController: cameraController,
+            actionHandler: self
+        )
         panelController.setResolutionOptions(cameraController.availableResolutions)
         buildMenu()
         buildStatusItem()
@@ -61,6 +66,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OverlayVisibilityHandl
         guard window != nil else { return }
         cameraController.refreshAvailableResolutions()
         panelController.setResolutionOptions(cameraController.availableResolutions)
+    }
+
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        showControls()
+        return false
     }
 
     private func persistCurrentWindowState() {

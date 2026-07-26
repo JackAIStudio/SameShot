@@ -25,6 +25,12 @@ struct CameraResolutionOption: Codable, Hashable {
     }
 }
 
+struct CameraActiveFormatInfo: Equatable {
+    var width: Int32
+    var height: Int32
+    var maxFPS: Double?
+}
+
 @MainActor
 protocol OverlayVisibilityHandling: AnyObject {
     func showOverlay()

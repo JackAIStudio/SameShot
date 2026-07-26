@@ -84,6 +84,7 @@ final class ControlPanelController: NSWindowController {
 
     private weak var overlayWindow: OverlayWindow?
     private weak var actionHandler: OverlayVisibilityHandling?
+    private weak var cameraController: CameraSessionController?
     private var settings = OverlaySettings.defaults
     private var resolutionOptions: [CameraResolutionOption] = [.auto]
 
@@ -99,9 +100,15 @@ final class ControlPanelController: NSWindowController {
         setupUI()
     }
 
-    func bind(window: OverlayWindow, settings: OverlaySettings, actionHandler: OverlayVisibilityHandling) {
+    func bind(
+        window: OverlayWindow,
+        settings: OverlaySettings,
+        cameraController: CameraSessionController,
+        actionHandler: OverlayVisibilityHandling
+    ) {
         self.overlayWindow = window
         self.actionHandler = actionHandler
+        self.cameraController = cameraController
         self.settings = settings
         push(settings: settings)
         scrollToTop()
@@ -138,6 +145,10 @@ final class ControlPanelController: NSWindowController {
         if let option = resolutionOptions.first(where: { $0.id == settings.cameraResolutionID }),
            let w = option.width, let h = option.height {
             sourceSizeLabel.stringValue = "来源分辨率：\(w) × \(h)" + ((option.maxFPS ?? 0) > 0 ? "  ·  ≤\(Int((option.maxFPS ?? 0).rounded()))fps" : "")
+        } else if settings.cameraResolutionID == CameraResolutionOption.auto.id,
+                  let info = cameraController?.activeFormatInfo {
+            let fpsText = info.maxFPS.map { " · ≤\(Int($0.rounded()))fps" } ?? ""
+            sourceSizeLabel.stringValue = "来源分辨率：自动（实际 \(info.width) × \(info.height)\(fpsText)）"
         } else {
             sourceSizeLabel.stringValue = "来源分辨率：自动"
         }
