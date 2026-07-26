@@ -12,7 +12,7 @@ final class OverlayWindow: NSPanel {
     private var suppressFrameSync = false
     private var observersInstalled = false
 
-    init(settings: OverlaySettings, cameraController: CameraSessionController, actionHandler: OverlayActionHandling?) {
+    init(settings: OverlaySettings, cameraController: CameraSessionController) {
         let rect = NSRect(x: settings.x, y: settings.y, width: settings.width, height: settings.height)
         overlayView = OverlayView(frame: rect)
         super.init(
@@ -36,7 +36,6 @@ final class OverlayWindow: NSPanel {
         isMovableByWindowBackground = true
         acceptsMouseMovedEvents = true
         contentView = overlayView
-        overlayView.actionHandler = actionHandler
         overlayView.cameraController = cameraController
         overlayView.settings = settings
         installWindowObserversIfNeeded()
@@ -45,11 +44,6 @@ final class OverlayWindow: NSPanel {
 
     override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { false }
-
-    override func mouseDown(with event: NSEvent) {
-        if settings.lockFrame { return }
-        super.mouseDown(with: event)
-    }
 
     override func setFrame(_ frameRect: NSRect, display flag: Bool) {
         let adjusted = adjustedFrameRect(frameRect)
@@ -61,11 +55,6 @@ final class OverlayWindow: NSPanel {
         let adjusted = adjustedFrameRect(frameRect)
         super.setFrame(adjusted, display: flag, animate: animateFlag)
         syncFromFrame()
-    }
-
-    override func setContentSize(_ size: NSSize) {
-        if settings.lockFrame { return }
-        super.setContentSize(size)
     }
 
     func apply(_ settings: OverlaySettings, preservePosition: Bool = true) {
@@ -140,13 +129,6 @@ final class OverlayWindow: NSPanel {
 
     private func syncFromFrame() {
         guard !suppressFrameSync else { return }
-        if settings.lockFrame {
-            suppressFrameSync = true
-            let locked = NSRect(x: settings.x, y: settings.y, width: settings.width, height: settings.height)
-            super.setFrame(locked, display: true)
-            suppressFrameSync = false
-            return
-        }
         settings.x = frame.origin.x
         settings.y = frame.origin.y
         settings.width = frame.size.width
@@ -159,8 +141,8 @@ final class OverlayWindow: NSPanel {
     }
 
     private func updateBehaviors() {
-        ignoresMouseEvents = settings.clickThrough
-        isMovableByWindowBackground = !settings.lockFrame && !settings.clickThrough
+        ignoresMouseEvents = false
+        isMovableByWindowBackground = true
         overlayView.settings = settings
     }
 }

@@ -35,9 +35,9 @@ swift build -c release
 rm -rf "$WORK_APP"
 mkdir -p "$MACOS_DIR" "$RES_DIR"
 
-# App icon + status bar assets
-if [[ -d "$ROOT/Resources" ]]; then
-  ditto --norsrc "$ROOT/Resources" "$RES_DIR"
+# App icon（状态栏图标由代码绘制，不依赖资源文件）
+if [[ -f "$ROOT/Resources/AppIcon.icns" ]]; then
+  ditto --norsrc "$ROOT/Resources/AppIcon.icns" "$RES_DIR/AppIcon.icns"
 fi
 
 # Copy binary with no resource forks

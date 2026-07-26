@@ -8,6 +8,7 @@
 .swiftpm/xcode/package.xcworkspace/contents.xcworkspacedata
 DerivedData/
 xcuserdata/
+*.xcuserstate
 
 # App packaging output
 /dist

@@ -79,13 +79,11 @@ final class ControlPanelController: NSWindowController {
     private let heightField = NSTextField(string: "")
     private let ratioLockButton = NSButton(title: "未锁定", target: nil, action: nil)
     private let cornerSlider = NSSlider(value: 18, minValue: 0, maxValue: 40, target: nil, action: nil)
-    private let clickThroughButton = NSButton(checkboxWithTitle: "点击穿透", target: nil, action: nil)
-    private let lockFrameButton = NSButton(checkboxWithTitle: "锁定位置与尺寸", target: nil, action: nil)
     private let mirrorButton = NSButton(checkboxWithTitle: "镜像视频", target: nil, action: nil)
     private let infoLabel = NSTextField(labelWithString: "")
 
     private weak var overlayWindow: OverlayWindow?
-    private weak var actionHandler: OverlayActionHandling?
+    private weak var actionHandler: OverlayVisibilityHandling?
     private var settings = OverlaySettings.defaults
     private var resolutionOptions: [CameraResolutionOption] = [.auto]
 
@@ -101,7 +99,7 @@ final class ControlPanelController: NSWindowController {
         setupUI()
     }
 
-    func bind(window: OverlayWindow, settings: OverlaySettings, actionHandler: OverlayActionHandling) {
+    func bind(window: OverlayWindow, settings: OverlaySettings, actionHandler: OverlayVisibilityHandling) {
         self.overlayWindow = window
         self.actionHandler = actionHandler
         self.settings = settings
@@ -126,8 +124,6 @@ final class ControlPanelController: NSWindowController {
         widthField.stringValue = String(Int(settings.width.rounded()))
         heightField.stringValue = String(Int(settings.height.rounded()))
         cornerSlider.doubleValue = settings.cornerRadius
-        clickThroughButton.state = settings.clickThrough ? .on : .off
-        lockFrameButton.state = settings.lockFrame ? .on : .off
         mirrorButton.state = settings.mirrorCamera ? .on : .off
         ratioLockButton.title = settings.lockAspectRatio ? "已锁定" : "未锁定"
         ratioLockButton.toolTip = settings.lockAspectRatio ? "已锁定当前比例" : "点击锁定当前比例"
@@ -170,7 +166,7 @@ final class ControlPanelController: NSWindowController {
             scrollView.bottomAnchor.constraint(equalTo: root.bottomAnchor)
         ])
 
-        let documentView = NSView(frame: NSRect(x: 0, y: 0, width: 520, height: 720))
+        let documentView = NSView(frame: NSRect(x: 0, y: 0, width: 520, height: 640))
         scrollView.documentView = documentView
 
         let stack = NSStackView()
@@ -202,10 +198,6 @@ final class ControlPanelController: NSWindowController {
         heightHandle.onDragDelta = { [weak self] delta in self?.adjustPreviewSize(delta: delta, forWidth: false) }
         cornerSlider.target = self
         cornerSlider.action = #selector(updateCornerRadius)
-        clickThroughButton.target = self
-        clickThroughButton.action = #selector(toggleClickThrough)
-        lockFrameButton.target = self
-        lockFrameButton.action = #selector(toggleLockFrame)
         mirrorButton.target = self
         mirrorButton.action = #selector(toggleMirror)
 
@@ -259,19 +251,15 @@ final class ControlPanelController: NSWindowController {
         stack.addArrangedSubview(sectionLabel("圆角"))
         stack.addArrangedSubview(fullWidth(cornerSlider))
 
-        stack.addArrangedSubview(clickThroughButton)
-        stack.addArrangedSubview(lockFrameButton)
         stack.addArrangedSubview(mirrorButton)
         stack.addArrangedSubview(infoLabel)
 
         let actionRow = NSStackView()
         actionRow.orientation = .horizontal
         actionRow.spacing = 8
-        actionRow.addArrangedSubview(button("记住当前位置和尺寸", #selector(rememberCurrentState)))
         actionRow.addArrangedSubview(button("吸附右下角", #selector(snapToBottomRight)))
         actionRow.addArrangedSubview(button("到鼠标屏幕", #selector(moveToMouseScreen)))
         actionRow.addArrangedSubview(button("隐藏窗口", #selector(hideOverlay)))
-        actionRow.addArrangedSubview(button("显示窗口", #selector(showOverlay)))
         stack.addArrangedSubview(actionRow)
     }
 
@@ -376,14 +364,6 @@ final class ControlPanelController: NSWindowController {
         mutateSettings { $0.cornerRadius = cornerSlider.doubleValue }
     }
 
-    @objc private func toggleClickThrough() {
-        mutateSettings { $0.clickThrough = (clickThroughButton.state == .on) }
-    }
-
-    @objc private func toggleLockFrame() {
-        mutateSettings { $0.lockFrame = (lockFrameButton.state == .on) }
-    }
-
     @objc private func toggleAspectRatioLock() {
         mutateSettings { $0.lockAspectRatio.toggle() }
     }
@@ -418,19 +398,7 @@ final class ControlPanelController: NSWindowController {
         push(settings: window.settings)
     }
 
-    @objc private func rememberCurrentState() {
-        guard let window = overlayWindow else { return }
-        var saved = window.settings
-        if let screenNumber = window.screen?.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber {
-            saved.targetScreenID = String(screenNumber.intValue)
-        }
-        saved.lastSavedAt = Date().timeIntervalSince1970
-        SettingsStore.shared.save(saved)
-        push(settings: saved)
-    }
-
     @objc private func hideOverlay() { actionHandler?.hideOverlay() }
-    @objc private func showOverlay() { actionHandler?.showOverlay() }
 
     private func mutateSettings(preservePosition: Bool = true, _ body: (inout OverlaySettings) -> Void) {
         guard let window = overlayWindow else { return }

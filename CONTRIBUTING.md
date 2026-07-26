@@ -5,19 +5,26 @@
 ## 开发环境
 
 - macOS 13 或更高版本
-- Xcode Command Line Tools
+- Xcode 26 或更高版本
 - Swift 6.2 工具链（与 `Package.swift` 中声明一致）
 
 ## 本地运行
 
 ```bash
-# 调试构建
-swift build
+# 打开原生 macOS App 工程
+open SameShot.xcodeproj
 
-# 打包成 .app
+# 快速检查 Swift Package 编译
+swift build
+```
+
+在 Xcode 中选择共享的 `SameShot App` Scheme 和 `My Mac`，按 `⌘R` 启动。若 Scheme 只显示为 `SameShot`，当前打开的是 Swift Package。涉及状态栏、App Icon、权限或 Bundle 行为时，必须使用原生 App 工程调试；直接运行 Swift Package 生成的是裸可执行文件，无法提供完整 App Bundle 身份。
+
+需要验证签名、公证和分发产物时：
+
+```bash
 ./build-app.sh
 
-# 启动
 open dist/SameShot.app
 ```
 
@@ -48,8 +55,9 @@ open dist/SameShot.app
 ## Pull Request 检查清单
 
 - [ ] 本地 `swift build` 通过
+- [ ] 涉及 macOS 界面或状态栏时，原生 `SameShot App` Scheme 的 Debug 构建通过
 - [ ] 如修改打包流程，已验证 `./build-app.sh`
-- [ ] 说明测试场景（摄像头预览 / 多屏幕 / 点击穿透等）
+- [ ] 说明测试场景（摄像头预览 / 拖动缩放 / 多屏幕等）
 - [ ] 文档如有需要已同步更新
 
 ## 问题反馈

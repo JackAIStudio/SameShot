@@ -26,15 +26,9 @@ struct CameraResolutionOption: Codable, Hashable {
 }
 
 @MainActor
-protocol OverlayActionHandling: AnyObject {
-    func showControls()
+protocol OverlayVisibilityHandling: AnyObject {
     func showOverlay()
     func hideOverlay()
-    func requestQuit()
-    func toggleClickThrough()
-    func toggleLockFrame()
-    func toggleAspectRatioLock()
-    func currentSettings() -> OverlaySettings
 }
 
 struct OverlaySettings: Codable {
@@ -44,12 +38,10 @@ struct OverlaySettings: Codable {
     var y: Double
     var width: Double
     var height: Double
-    var clickThrough: Bool
     var targetScreenID: String?
     var cornerRadius: Double
     var mirrorCamera: Bool
     var cameraResolutionID: String
-    var lockFrame: Bool
     var lockAspectRatio: Bool
 
     static let defaults = OverlaySettings(
@@ -58,12 +50,10 @@ struct OverlaySettings: Codable {
         y: 100,
         width: 320,
         height: 180,
-        clickThrough: false,
         targetScreenID: nil,
         cornerRadius: 18,
         mirrorCamera: true,
         cameraResolutionID: CameraResolutionOption.auto.id,
-        lockFrame: false,
         lockAspectRatio: false
     )
 }

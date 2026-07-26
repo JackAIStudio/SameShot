@@ -1,8 +1,7 @@
 import AppKit
 
 @MainActor
-final class AppDelegate: NSObject, NSApplicationDelegate, OverlayActionHandling {
-    private var lastPersistedSettings = OverlaySettings.defaults
+final class AppDelegate: NSObject, NSApplicationDelegate, OverlayVisibilityHandling {
     private var window: OverlayWindow!
     private var restoreWindow: RestoreOverlayWindow!
     private var settings = SettingsStore.shared.load()
@@ -20,8 +19,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OverlayActionHandling 
             settings.cameraResolutionID = CameraResolutionOption.auto.id
         }
 
-        lastPersistedSettings = settings
-        window = OverlayWindow(settings: settings, cameraController: cameraController, actionHandler: self)
+        window = OverlayWindow(settings: settings, cameraController: cameraController)
         restoreWindow = RestoreOverlayWindow(actionHandler: self)
         window.orderFrontRegardless()
         panelController.bind(window: window, settings: settings, actionHandler: self)
@@ -65,14 +63,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OverlayActionHandling 
         panelController.setResolutionOptions(cameraController.availableResolutions)
     }
 
-    func rememberCurrentWindowState() {
+    private func persistCurrentWindowState() {
         autosaveTask?.cancel()
         settings = window.settings
         if let screenNumber = window.screen?.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber {
             settings.targetScreenID = String(screenNumber.intValue)
         }
         settings.lastSavedAt = Date().timeIntervalSince1970
-        lastPersistedSettings = settings
         SettingsStore.shared.save(settings)
     }
 
@@ -80,7 +77,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OverlayActionHandling 
         autosaveTask?.cancel()
         let work = DispatchWorkItem { [weak self] in
             guard let self else { return }
-            self.rememberCurrentWindowState()
+            self.persistCurrentWindowState()
         }
         autosaveTask = work
         DispatchQueue.main.asyncAfter(deadline: .now() + autosaveDelay, execute: work)
@@ -115,8 +112,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OverlayActionHandling 
         let appMenu = NSMenu()
         appMenuItem.submenu = appMenu
         appMenu.addItem(withTitle: "控制面板", action: #selector(showControls), keyEquivalent: ",")
-        appMenu.addItem(withTitle: "切换点击穿透", action: #selector(toggleClickThrough), keyEquivalent: "t")
-        appMenu.addItem(withTitle: "切换锁定位置与尺寸", action: #selector(toggleLockFrame), keyEquivalent: "l")
         appMenu.addItem(withTitle: "切换锁定视频比例", action: #selector(toggleAspectRatioLock), keyEquivalent: "r")
         appMenu.addItem(withTitle: "吸附到右下角", action: #selector(snapToBottomRight), keyEquivalent: "b")
         appMenu.addItem(NSMenuItem.separator())
@@ -125,19 +120,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OverlayActionHandling 
     }
 
     private func buildStatusItem() {
-        let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
+        let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
+        item.autosaveName = nil
+        item.isVisible = true
         item.button?.toolTip = "SameShot"
-        if let image = Self.statusBarImage() {
-            item.button?.image = image
-            item.button?.imagePosition = .imageOnly
-            item.button?.title = ""
-        } else {
-            item.button?.title = "SS"
-        }
+        item.button?.setAccessibilityLabel("SameShot")
+        item.button?.image = Self.statusBarImage()
+        item.button?.imagePosition = .imageOnly
+        item.button?.title = ""
         let menu = NSMenu()
         menu.addItem(withTitle: "显示控制面板", action: #selector(showControls), keyEquivalent: "")
-        menu.addItem(withTitle: "切换点击穿透", action: #selector(toggleClickThrough), keyEquivalent: "")
-        menu.addItem(withTitle: "切换锁定位置与尺寸", action: #selector(toggleLockFrame), keyEquivalent: "")
         menu.addItem(withTitle: "切换锁定视频比例", action: #selector(toggleAspectRatioLock), keyEquivalent: "")
         menu.addItem(withTitle: "吸附到右下角", action: #selector(snapToBottomRight), keyEquivalent: "")
         menu.addItem(withTitle: "移动到鼠标所在屏幕", action: #selector(moveOverlayToMouseScreen), keyEquivalent: "")
@@ -149,17 +141,31 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OverlayActionHandling 
         statusItem = item
     }
 
-    private static func statusBarImage() -> NSImage? {
-        let names = ["StatusBarIcon", "logo"]
-        for name in names {
-            if let image = Bundle.main.image(forResource: name) {
-                let icon = image.copy() as! NSImage
-                icon.isTemplate = true
-                icon.size = NSSize(width: 18, height: 18)
-                return icon
-            }
+    private static func statusBarImage() -> NSImage {
+        let size = NSSize(width: 18, height: 18)
+        let image = NSImage(size: size, flipped: false) { _ in
+            NSGraphicsContext.current?.shouldAntialias = true
+            NSColor.black.setStroke()
+
+            let screen = NSBezierPath(
+                roundedRect: NSRect(x: 1.5, y: 2.75, width: 15, height: 12.5),
+                xRadius: 2.7,
+                yRadius: 2.7
+            )
+            screen.lineWidth = 1.8
+            screen.stroke()
+
+            let pictureInPicture = NSBezierPath(
+                roundedRect: NSRect(x: 9.25, y: 4.5, width: 5.5, height: 4.5),
+                xRadius: 1.1,
+                yRadius: 1.1
+            )
+            pictureInPicture.lineWidth = 1.6
+            pictureInPicture.stroke()
+            return true
         }
-        return nil
+        image.isTemplate = true
+        return image
     }
 
     @objc func showControls() {
@@ -179,39 +185,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OverlayActionHandling 
         window.orderOut(nil)
     }
 
-    @objc func requestQuit() {
-        NSApp.activate(ignoringOtherApps: true)
-        let alert = NSAlert()
-        alert.alertStyle = .warning
-        alert.messageText = "确认关闭 SameShot？"
-        alert.informativeText = "关闭后会退出程序，视频预览和恢复按钮都会消失。"
-        alert.addButton(withTitle: "关闭程序")
-        alert.addButton(withTitle: "取消")
-        if alert.runModal() == .alertFirstButtonReturn {
-            NSApp.terminate(nil)
-        }
-    }
-
-    @objc func toggleClickThrough() {
-        var next = window.settings
-        next.clickThrough.toggle()
-        apply(next)
-    }
-
-    @objc func toggleLockFrame() {
-        var next = window.settings
-        next.lockFrame.toggle()
-        apply(next)
-    }
-
     @objc func toggleAspectRatioLock() {
         var next = window.settings
         next.lockAspectRatio.toggle()
         apply(next)
-    }
-
-    func currentSettings() -> OverlaySettings {
-        window.settings
     }
 
     @objc private func snapToBottomRight() {
@@ -251,7 +228,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OverlayActionHandling 
     }
 
     func applicationWillTerminate(_ notification: Notification) {
-        rememberCurrentWindowState()
+        persistCurrentWindowState()
     }
 
     static func screenID(for screen: NSScreen) -> String? {

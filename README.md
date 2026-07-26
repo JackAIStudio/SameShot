@@ -34,10 +34,7 @@ SameShot 走的是另一条路：
 
 - 摄像头实时预览
 - 动态列出摄像头可用分辨率（含最高支持帧率）
-- 点击穿透
-- 锁定位置与尺寸
 - 锁定视频比例
-- hover 悬浮快捷按钮
 - 拖动、缩放、吸附右下角
 - 将悬浮窗移动到鼠标所在屏幕
 - 状态栏图标入口
@@ -50,7 +47,8 @@ SameShot 走的是另一条路：
 
 - macOS 13.0 或更高版本
 - 摄像头
-- Swift 6.2 工具链 / Xcode Command Line Tools（从源码构建时）
+- Xcode 26 或更高版本（推荐用于界面调试）
+- Swift 6.2 工具链 / Xcode Command Line Tools（仅使用命令行构建时）
 
 ## 权限说明
 
@@ -79,11 +77,11 @@ open dist/SameShot.app
 
 ## 使用方式
 
-1. 启动后会出现悬浮窗和状态栏图标 `SS`
+1. 启动后会出现悬浮窗和 SameShot 品牌状态栏图标
 2. 授权摄像头访问后，悬浮窗会显示摄像头实时预览
 3. 开始录屏或直播，把主内容与画中画一起录进同一画面
 4. 发现遮挡时，立刻拖动或缩放悬浮窗
-5. 需要时可通过控制面板调整分辨率、圆角、镜像、锁定和点击穿透
+5. 需要时可通过控制面板调整分辨率、圆角、镜像和视频比例
 
 ## 项目结构
 
@@ -91,6 +89,8 @@ open dist/SameShot.app
 SameShot/
 ├── Sources/SameShot/   # 应用源码
 ├── Resources/          # App Icon / Logo / 状态栏图标
+├── Config/             # Xcode App 的 Bundle 身份与权限配置
+├── SameShot.xcodeproj/ # 原生 macOS App 工程与共享 Scheme
 ├── Package.swift       # Swift Package 定义
 ├── build-app.sh        # 打包 .app / DMG，并安装到 /Applications
 ├── LICENSE
@@ -102,8 +102,27 @@ SameShot/
 
 ## 开发
 
+界面与状态栏功能请通过原生 App 工程调试：
+
+```bash
+open SameShot.xcodeproj
+```
+
+在 Xcode 中选择共享的 `SameShot App` Scheme 和 `My Mac`，然后按 `⌘R`。该入口运行的是带固定 Bundle ID、App Icon 和程序化品牌状态栏图标的 Debug `.app`，Bartender 等菜单栏管理工具可以稳定识别它。若 Scheme 显示为 `SameShot` 而不是 `SameShot App`，说明当前打开的仍是 Swift Package。
+
+不要通过打开 `Package.swift` 后直接运行可执行文件来调试菜单栏界面；Swift Package 入口只生成裸可执行文件，不具备 macOS App Bundle 身份。
+
+如果使用 Bartender 且图标仍未直接出现在顶部菜单栏，请先在 Bartender 的“菜单栏布局”中刷新项目清单，再检查“隐藏项目”和“始终隐藏”分组。SameShot 不会绕过用户在菜单栏管理工具中设置的显示规则。
+
+命令行编译仍然可用于快速检查源码：
+
 ```bash
 swift build
+```
+
+需要生成签名、公证的分发包时：
+
+```bash
 ./build-app.sh
 open dist/SameShot.app
 # 同时会生成 dist/SameShot-0.1.2.dmg，并安装到 /Applications/SameShot.app

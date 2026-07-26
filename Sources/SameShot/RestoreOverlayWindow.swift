@@ -188,9 +188,9 @@ final class RestoreOverlayWindow: NSPanel {
     private let floatingButtonView = RestoreFloatingButtonView(frame: NSRect(x: 0, y: 0, width: 132, height: 42))
     private var usesCustomPosition = false
 
-    weak var actionHandler: OverlayActionHandling?
+    weak var actionHandler: OverlayVisibilityHandling?
 
-    init(actionHandler: OverlayActionHandling?) {
+    init(actionHandler: OverlayVisibilityHandling?) {
         let frame = NSRect(x: 0, y: 0, width: 132, height: 42)
         self.actionHandler = actionHandler
         super.init(
