@@ -8,16 +8,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OverlayVisibilityHandl
     private let panelController = ControlPanelController()
     private let cameraController = CameraSessionController()
     private var statusItem: NSStatusItem?
+    private var overlayVisibilityMenuItems: [NSMenuItem] = []
     private var autosaveTask: DispatchWorkItem?
     private let autosaveDelay: TimeInterval = 0.45
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         let resolved = resolveInitialSettings(settings)
-        settings = resolved
         cameraController.refreshAvailableResolutions()
-        if !cameraController.availableResolutions.contains(where: { $0.id == settings.cameraResolutionID }) {
-            settings.cameraResolutionID = CameraResolutionOption.auto.id
-        }
+        settings = sanitizedCameraSettings(resolved)
 
         window = OverlayWindow(settings: settings, cameraController: cameraController)
         restoreWindow = RestoreOverlayWindow(actionHandler: self)
@@ -25,8 +23,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OverlayVisibilityHandl
         panelController.bind(
             window: window,
             settings: settings,
-            cameraController: cameraController,
-            actionHandler: self
+            cameraController: cameraController
         )
         panelController.setResolutionOptions(cameraController.availableResolutions)
         buildMenu()
@@ -59,12 +56,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OverlayVisibilityHandl
 
     @objc private func syncCameraState() {
         cameraController.refreshAvailableResolutions()
+        let currentSettings = window.settings
+        let sanitizedSettings = sanitizedCameraSettings(currentSettings)
+        if sanitizedSettings.cameraResolutionID != currentSettings.cameraResolutionID ||
+            sanitizedSettings.cameraFrameRate != currentSettings.cameraFrameRate {
+            window.apply(sanitizedSettings)
+        }
         panelController.setResolutionOptions(cameraController.availableResolutions)
     }
 
     func applicationDidBecomeActive(_ notification: Notification) {
         guard window != nil else { return }
         cameraController.refreshAvailableResolutions()
+        let currentSettings = window.settings
+        let sanitizedSettings = sanitizedCameraSettings(currentSettings)
+        if sanitizedSettings.cameraResolutionID != currentSettings.cameraResolutionID ||
+            sanitizedSettings.cameraFrameRate != currentSettings.cameraFrameRate {
+            window.apply(sanitizedSettings)
+        }
         panelController.setResolutionOptions(cameraController.availableResolutions)
     }
 
@@ -104,28 +113,50 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OverlayVisibilityHandl
             }
             return updated
         }
-        if let screen = NSScreen.screens.last {
+        let mouse = NSEvent.mouseLocation
+        if let screen = NSScreen.screens.first(where: { NSMouseInRect(mouse, $0.frame, false) }) ?? NSScreen.main {
             let visible = screen.visibleFrame
             updated.targetScreenID = Self.screenID(for: screen)
-            updated.width = max(updated.width, 700)
-            updated.height = max(updated.height, 420)
-            updated.x = visible.minX + 80
-            updated.y = visible.maxY - updated.height - 120
+            updated.x = visible.maxX - updated.width - 40
+            updated.y = visible.minY + 40
+        }
+        return updated
+    }
+
+    private func sanitizedCameraSettings(_ current: OverlaySettings) -> OverlaySettings {
+        var updated = current
+        guard current.cameraResolutionID != CameraResolutionOption.auto.id else {
+            updated.cameraFrameRate = nil
+            return updated
+        }
+        guard let option = cameraController.availableResolutions.first(where: { $0.id == current.cameraResolutionID }) else {
+            updated.cameraResolutionID = CameraResolutionOption.auto.id
+            updated.cameraFrameRate = nil
+            return updated
+        }
+        if let frameRate = current.cameraFrameRate,
+           let matchingFrameRate = option.matchingFrameRate(for: frameRate) {
+            updated.cameraFrameRate = matchingFrameRate
+        } else {
+            updated.cameraFrameRate = option.preferredFrameRate
         }
         return updated
     }
 
     private func buildMenu() {
+        overlayVisibilityMenuItems.removeAll()
         let mainMenu = NSMenu()
         let appMenuItem = NSMenuItem()
         mainMenu.addItem(appMenuItem)
         let appMenu = NSMenu()
         appMenuItem.submenu = appMenu
-        appMenu.addItem(withTitle: "控制面板", action: #selector(showControls), keyEquivalent: ",")
-        appMenu.addItem(withTitle: "切换锁定视频比例", action: #selector(toggleAspectRatioLock), keyEquivalent: "r")
-        appMenu.addItem(withTitle: "吸附到右下角", action: #selector(snapToBottomRight), keyEquivalent: "b")
+        appMenu.addItem(menuItem("控制面板", action: #selector(showControls), keyEquivalent: ","))
+        let visibilityItem = menuItem("隐藏画中画", action: #selector(toggleOverlayVisibility))
+        appMenu.addItem(visibilityItem)
+        overlayVisibilityMenuItems.append(visibilityItem)
+        appMenu.addItem(menuItem("重置画中画位置", action: #selector(resetOverlayPosition)))
         appMenu.addItem(NSMenuItem.separator())
-        appMenu.addItem(withTitle: "退出 SameShot", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+        appMenu.addItem(menuItem("退出 SameShot", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q", target: NSApp))
         NSApp.mainMenu = mainMenu
     }
 
@@ -139,16 +170,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OverlayVisibilityHandl
         item.button?.imagePosition = .imageOnly
         item.button?.title = ""
         let menu = NSMenu()
-        menu.addItem(withTitle: "显示控制面板", action: #selector(showControls), keyEquivalent: "")
-        menu.addItem(withTitle: "切换锁定视频比例", action: #selector(toggleAspectRatioLock), keyEquivalent: "")
-        menu.addItem(withTitle: "吸附到右下角", action: #selector(snapToBottomRight), keyEquivalent: "")
-        menu.addItem(withTitle: "移动到鼠标所在屏幕", action: #selector(moveOverlayToMouseScreen), keyEquivalent: "")
-        menu.addItem(withTitle: "隐藏悬浮窗", action: #selector(hideOverlay), keyEquivalent: "")
-        menu.addItem(withTitle: "显示悬浮窗", action: #selector(showOverlay), keyEquivalent: "")
+        menu.addItem(menuItem("显示控制面板", action: #selector(showControls)))
+        let visibilityItem = menuItem("隐藏画中画", action: #selector(toggleOverlayVisibility))
+        menu.addItem(visibilityItem)
+        overlayVisibilityMenuItems.append(visibilityItem)
+        menu.addItem(menuItem("重置画中画位置", action: #selector(resetOverlayPosition)))
         menu.addItem(NSMenuItem.separator())
-        menu.addItem(withTitle: "退出 SameShot", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "")
+        menu.addItem(menuItem("退出 SameShot", action: #selector(NSApplication.terminate(_:)), target: NSApp))
         item.menu = menu
         statusItem = item
+        updateOverlayVisibilityMenuTitles()
+    }
+
+    private func menuItem(
+        _ title: String,
+        action: Selector,
+        keyEquivalent: String = "",
+        target: AnyObject? = nil
+    ) -> NSMenuItem {
+        let item = NSMenuItem(title: title, action: action, keyEquivalent: keyEquivalent)
+        item.target = target ?? self
+        return item
     }
 
     private static func statusBarImage() -> NSImage {
@@ -188,42 +230,40 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OverlayVisibilityHandl
     @objc func showOverlay() {
         restoreWindow.orderOut(nil)
         window.orderFrontRegardless()
+        updateOverlayVisibilityMenuTitles()
     }
 
     @objc func hideOverlay() {
         restoreWindow.show(near: window.frame, on: currentScreen())
         window.orderOut(nil)
+        updateOverlayVisibilityMenuTitles()
     }
 
-    @objc func toggleAspectRatioLock() {
-        var next = window.settings
-        next.lockAspectRatio.toggle()
-        apply(next)
+    @objc private func toggleOverlayVisibility() {
+        window.isVisible ? hideOverlay() : showOverlay()
     }
 
-    @objc private func snapToBottomRight() {
-        guard let screen = currentScreen() else { return }
+    @objc private func resetOverlayPosition() {
+        let mouse = NSEvent.mouseLocation
+        guard let screen =
+            NSScreen.screens.first(where: { NSMouseInRect(mouse, $0.frame, false) }) ??
+            NSScreen.main else {
+            return
+        }
         let visible = screen.visibleFrame
         let width = CGFloat(window.settings.width)
         let height = CGFloat(window.settings.height)
         let rect = NSRect(x: visible.maxX - width - 40, y: visible.minY + 40, width: width, height: height)
         window.move(to: rect)
-    }
-
-    @objc private func moveOverlayToMouseScreen() {
-        let mouse = NSEvent.mouseLocation
-        guard let screen = NSScreen.screens.first(where: { NSMouseInRect(mouse, $0.frame, false) }) ?? NSScreen.main else { return }
         var next = window.settings
         next.targetScreenID = Self.screenID(for: screen)
         apply(next)
-        let visible = screen.visibleFrame
-        let width = CGFloat(window.settings.width)
-        let height = CGFloat(window.settings.height)
-        let x = min(max(mouse.x - width / 2, visible.minX + 20), visible.maxX - width - 20)
-        let y = min(max(mouse.y - height / 2, visible.minY + 20), visible.maxY - height - 20)
-        let rect = NSRect(x: x, y: y, width: width, height: height)
-        window.move(to: rect)
         showOverlay()
+    }
+
+    private func updateOverlayVisibilityMenuTitles() {
+        let title = window?.isVisible == true ? "隐藏画中画" : "显示画中画"
+        overlayVisibilityMenuItems.forEach { $0.title = title }
     }
 
     private func currentScreen() -> NSScreen? {

@@ -15,6 +15,7 @@ final class CameraSessionController: NSObject {
     private var configured = false
     private var currentDevice: AVCaptureDevice?
     private var currentResolutionID: String = CameraResolutionOption.auto.id
+    private var currentFrameRate: Double?
     private(set) var availability: CameraAvailability = .unavailable
     private(set) var availableResolutions: [CameraResolutionOption] = [.auto]
 
@@ -26,28 +27,31 @@ final class CameraSessionController: NSObject {
         guard isAvailable, let device = currentDevice else { return nil }
         let dimensions = CMVideoFormatDescriptionGetDimensions(device.activeFormat.formatDescription)
         let activeFrameDuration = CMTimeGetSeconds(device.activeVideoMinFrameDuration)
-        let supportedMaxFPS = device.activeFormat.videoSupportedFrameRateRanges
-            .map(\ .maxFrameRate)
-            .max()
-        let maxFPS = if activeFrameDuration.isFinite, activeFrameDuration > 0 {
+        let frameRate = if activeFrameDuration.isFinite, activeFrameDuration > 0 {
             1 / activeFrameDuration
         } else {
-            supportedMaxFPS
+            device.activeFormat.videoSupportedFrameRateRanges.map(\ .maxFrameRate).max()
         }
         return CameraActiveFormatInfo(
             width: dimensions.width,
             height: dimensions.height,
-            maxFPS: maxFPS
+            frameRate: frameRate
         )
     }
 
-    func attach(to previewLayer: AVCaptureVideoPreviewLayer, resolutionID: String) {
+    func attach(to previewLayer: AVCaptureVideoPreviewLayer, resolutionID: String, frameRate: Double?) {
+        let configurationChanged =
+            resolutionID != currentResolutionID ||
+            !Self.frameRatesEqual(frameRate, currentFrameRate)
+        currentResolutionID = resolutionID
+        currentFrameRate = frameRate
         configureIfNeeded()
-        updateResolutionIfNeeded(resolutionID)
+        if configurationChanged {
+            applyCurrentCaptureConfiguration()
+        }
         if previewLayer.session !== session {
             previewLayer.session = isAvailable ? session : nil
         }
-        previewLayer.videoGravity = .resizeAspectFill
         if isAvailable, !session.isRunning {
             session.startRunning()
         }
@@ -100,91 +104,162 @@ final class CameraSessionController: NSObject {
         }
 
         session.beginConfiguration()
-        defer {
-            session.commitConfiguration()
-            if isAvailable, !session.isRunning {
-                session.startRunning()
-            }
-        }
-
         guard let device = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .front)
                 ?? AVCaptureDevice.default(for: .video),
               let input = try? AVCaptureDeviceInput(device: device),
               session.canAddInput(input) else {
+            session.commitConfiguration()
             availability = .unavailable
             availableResolutions = [.auto]
             return
         }
 
         session.addInput(input)
+        if session.canSetSessionPreset(.high) {
+            session.sessionPreset = .high
+        }
+        session.commitConfiguration()
+
         currentDevice = device
         availability = .available
         availableResolutions = Self.resolutionOptions(for: device)
-        updateResolutionIfNeeded(currentResolutionID)
+        applyCurrentCaptureConfiguration()
+        if !session.isRunning {
+            session.startRunning()
+        }
     }
 
     private func notifyAvailabilityChanged() {
         NotificationCenter.default.post(name: .cameraAvailabilityDidChange, object: self)
     }
 
-    private func updateResolutionIfNeeded(_ resolutionID: String) {
-        guard resolutionID != currentResolutionID || !configured else { return }
-        currentResolutionID = resolutionID
-        guard isAvailable else { return }
-        let option = availableResolutions.first(where: { $0.id == resolutionID }) ?? .auto
-        let preset = option.sessionPreset
-        if session.sessionPreset != preset, session.canSetSessionPreset(preset) {
+    private func applyCurrentCaptureConfiguration() {
+        guard isAvailable, let device = currentDevice else { return }
+
+        guard currentResolutionID != CameraResolutionOption.auto.id else {
             session.beginConfiguration()
-            session.sessionPreset = preset
+            if session.canSetSessionPreset(.high) {
+                session.sessionPreset = .high
+            }
             session.commitConfiguration()
+            return
+        }
+
+        guard let option = availableResolutions.first(where: { $0.id == currentResolutionID }),
+              let width = option.width,
+              let height = option.height else {
+            return
+        }
+        let requestedFrameRate =
+            currentFrameRate.flatMap(option.matchingFrameRate) ??
+            option.preferredFrameRate
+        guard let requestedFrameRate,
+              let format = Self.bestFormat(
+                for: device,
+                width: width,
+                height: height,
+                frameRate: requestedFrameRate
+              ) else {
+            return
+        }
+
+        do {
+            try device.lockForConfiguration()
+            defer { device.unlockForConfiguration() }
+            device.activeFormat = format
+            let duration = CMTime(seconds: 1 / requestedFrameRate, preferredTimescale: 1_000_000_000)
+            device.activeVideoMinFrameDuration = duration
+            device.activeVideoMaxFrameDuration = duration
+        } catch {
+            return
         }
     }
 
     static func resolutionOptions(for device: AVCaptureDevice?) -> [CameraResolutionOption] {
         guard let device else { return [.auto] }
-        var seen = Set<String>()
-        var items: [CameraResolutionOption] = [.auto]
+        struct ResolutionKey: Hashable {
+            var width: Int32
+            var height: Int32
+        }
 
+        var groupedFrameRates: [ResolutionKey: [Double]] = [:]
         for format in device.formats {
             let desc = format.formatDescription
             let dims = CMVideoFormatDescriptionGetDimensions(desc)
-            let maxFPS = format.videoSupportedFrameRateRanges.map(\ .maxFrameRate).max() ?? 0
-            let preset = presetFor(width: dims.width, height: dims.height)
-            let key = "\(dims.width)x\(dims.height):\(preset?.rawValue ?? "none")"
-            if seen.contains(key) { continue }
-            seen.insert(key)
-            let fpsText = maxFPS > 0 ? " · ≤\(Int(maxFPS.rounded()))fps" : ""
-            items.append(
-                CameraResolutionOption(
-                    id: key,
-                    label: "\(dims.width)×\(dims.height)\(fpsText)",
-                    width: dims.width,
-                    height: dims.height,
-                    maxFPS: maxFPS,
-                    presetRawValue: preset?.rawValue
-                )
-            )
+            let key = ResolutionKey(width: dims.width, height: dims.height)
+            let rates = format.videoSupportedFrameRateRanges.flatMap(Self.userFacingFrameRates)
+            groupedFrameRates[key, default: []].append(contentsOf: rates)
         }
 
-        return items.sorted { lhs, rhs in
-            switch (lhs.width, rhs.width) {
-            case (nil, _): return true
-            case (_, nil): return false
-            case let (lw?, rw?):
-                if lw == rw { return (lhs.height ?? 0) < (rhs.height ?? 0) }
-                return lw < rw
+        let customOptions = groupedFrameRates.compactMap { key, rates -> CameraResolutionOption? in
+            let uniqueRates = Self.uniqueFrameRates(rates)
+            guard !uniqueRates.isEmpty else { return nil }
+            return CameraResolutionOption(
+                id: "\(key.width)x\(key.height)",
+                label: "\(key.width) × \(key.height)",
+                width: key.width,
+                height: key.height,
+                frameRates: uniqueRates
+            )
+        }.sorted { lhs, rhs in
+            let lhsPixels = Int64(lhs.width ?? 0) * Int64(lhs.height ?? 0)
+            let rhsPixels = Int64(rhs.width ?? 0) * Int64(rhs.height ?? 0)
+            if lhsPixels == rhsPixels {
+                return (lhs.width ?? 0) > (rhs.width ?? 0)
+            }
+            return lhsPixels > rhsPixels
+        }
+
+        return [.auto] + customOptions
+    }
+
+    private static func userFacingFrameRates(for range: AVFrameRateRange) -> [Double] {
+        let commonRates: [Double] = [24, 25, 30, 50, 60, 120, 240]
+        var rates = commonRates.filter {
+            $0 >= range.minFrameRate - 0.01 && $0 <= range.maxFrameRate + 0.01
+        }
+        if range.maxFrameRate >= 10,
+           !rates.contains(where: { abs($0 - range.maxFrameRate) < 0.2 }) {
+            rates.append(range.maxFrameRate)
+        }
+        return rates
+    }
+
+    private static func uniqueFrameRates(_ rates: [Double]) -> [Double] {
+        rates.sorted().reduce(into: []) { result, rate in
+            if !result.contains(where: { abs($0 - rate) < 0.2 }) {
+                result.append(rate)
             }
         }
     }
 
-    private static func presetFor(width: Int32, height: Int32) -> AVCaptureSession.Preset? {
-        let pair = (max(width, height), min(width, height))
-        switch pair {
-        case (3840, 2160): return .hd4K3840x2160
-        case (1920, 1080): return .hd1920x1080
-        case (1280, 720): return .hd1280x720
-        case (640, 480): return .vga640x480
-        default: return .high
+    private static func bestFormat(
+        for device: AVCaptureDevice,
+        width: Int32,
+        height: Int32,
+        frameRate: Double
+    ) -> AVCaptureDevice.Format? {
+        device.formats
+            .filter { format in
+                let dimensions = CMVideoFormatDescriptionGetDimensions(format.formatDescription)
+                guard dimensions.width == width, dimensions.height == height else { return false }
+                return format.videoSupportedFrameRateRanges.contains {
+                    frameRate >= $0.minFrameRate - 0.01 &&
+                    frameRate <= $0.maxFrameRate + 0.01
+                }
+            }
+            .min { lhs, rhs in
+                let lhsMax = lhs.videoSupportedFrameRateRanges.map(\ .maxFrameRate).max() ?? .greatestFiniteMagnitude
+                let rhsMax = rhs.videoSupportedFrameRateRanges.map(\ .maxFrameRate).max() ?? .greatestFiniteMagnitude
+                return abs(lhsMax - frameRate) < abs(rhsMax - frameRate)
+            }
+    }
+
+    private static func frameRatesEqual(_ lhs: Double?, _ rhs: Double?) -> Bool {
+        switch (lhs, rhs) {
+        case (nil, nil): true
+        case let (lhs?, rhs?): abs(lhs - rhs) < 0.01
+        default: false
         }
     }
 }

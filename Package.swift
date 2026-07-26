@@ -13,6 +13,11 @@ let package = Package(
         .executableTarget(
             name: "SameShot",
             path: "Sources/SameShot"
+        ),
+        .testTarget(
+            name: "SameShotTests",
+            dependencies: ["SameShot"],
+            path: "Tests/SameShotTests"
         )
     ]
 )

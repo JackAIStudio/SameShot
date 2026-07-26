@@ -99,7 +99,11 @@ final class OverlayView: NSView {
     }
 
     private func reconnectCameraIfNeeded() {
-        cameraController?.attach(to: previewLayer, resolutionID: settings.cameraResolutionID)
+        cameraController?.attach(
+            to: previewLayer,
+            resolutionID: settings.cameraResolutionID,
+            frameRate: settings.cameraFrameRate
+        )
         updateCameraStatus()
     }
 
@@ -127,6 +131,7 @@ final class OverlayView: NSView {
         layer?.masksToBounds = false
 
         cameraContainer.layer?.cornerRadius = settings.cornerRadius
+        previewLayer.videoGravity = settings.videoScalingMode == .fill ? .resizeAspectFill : .resizeAspect
 
         if let connection = previewLayer.connection, connection.isVideoMirroringSupported {
             connection.automaticallyAdjustsVideoMirroring = false

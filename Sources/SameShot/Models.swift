@@ -1,5 +1,4 @@
 import AppKit
-import AVFoundation
 import Foundation
 
 struct CameraResolutionOption: Codable, Hashable {
@@ -7,28 +6,72 @@ struct CameraResolutionOption: Codable, Hashable {
     var label: String
     var width: Int32?
     var height: Int32?
-    var maxFPS: Double?
-    var presetRawValue: String?
+    var frameRates: [Double]
 
     static let auto = CameraResolutionOption(
         id: "auto",
-        label: "自动",
+        label: "自动（推荐）",
         width: nil,
         height: nil,
-        maxFPS: nil,
-        presetRawValue: AVCaptureSession.Preset.high.rawValue
+        frameRates: []
     )
 
-    var sessionPreset: AVCaptureSession.Preset {
-        guard let presetRawValue else { return .high }
-        return AVCaptureSession.Preset(rawValue: presetRawValue)
+    func supports(frameRate: Double) -> Bool {
+        matchingFrameRate(for: frameRate) != nil
+    }
+
+    func matchingFrameRate(for frameRate: Double) -> Double? {
+        frameRates.first { abs($0 - frameRate) < 0.2 }
+    }
+
+    var preferredFrameRate: Double? {
+        frameRates.min(by: { abs($0 - 30) < abs($1 - 30) })
     }
 }
 
 struct CameraActiveFormatInfo: Equatable {
     var width: Int32
     var height: Int32
-    var maxFPS: Double?
+    var frameRate: Double?
+}
+
+enum OverlayAspectRatio: String, Codable, CaseIterable {
+    case source
+    case sixteenNine
+    case fourThree
+    case square
+    case free
+
+    var title: String {
+        switch self {
+        case .source: "跟随摄像头"
+        case .sixteenNine: "16:9"
+        case .fourThree: "4:3"
+        case .square: "1:1"
+        case .free: "自由调整"
+        }
+    }
+
+    var fixedValue: Double? {
+        switch self {
+        case .sixteenNine: 16.0 / 9.0
+        case .fourThree: 4.0 / 3.0
+        case .square: 1
+        case .source, .free: nil
+        }
+    }
+}
+
+enum VideoScalingMode: String, Codable, CaseIterable {
+    case fill
+    case fit
+
+    var title: String {
+        switch self {
+        case .fill: "填满（可能裁切）"
+        case .fit: "完整显示"
+        }
+    }
 }
 
 @MainActor
@@ -48,7 +91,9 @@ struct OverlaySettings: Codable {
     var cornerRadius: Double
     var mirrorCamera: Bool
     var cameraResolutionID: String
-    var lockAspectRatio: Bool
+    var cameraFrameRate: Double?
+    var aspectRatio: OverlayAspectRatio
+    var videoScalingMode: VideoScalingMode
 
     static let defaults = OverlaySettings(
         lastSavedAt: nil,
@@ -60,8 +105,69 @@ struct OverlaySettings: Codable {
         cornerRadius: 18,
         mirrorCamera: true,
         cameraResolutionID: CameraResolutionOption.auto.id,
-        lockAspectRatio: false
+        cameraFrameRate: nil,
+        aspectRatio: .source,
+        videoScalingMode: .fill
     )
+}
+
+extension OverlaySettings {
+    private enum CodingKeys: String, CodingKey {
+        case lastSavedAt
+        case x
+        case y
+        case width
+        case height
+        case targetScreenID
+        case cornerRadius
+        case mirrorCamera
+        case cameraResolutionID
+        case cameraFrameRate
+        case aspectRatio
+        case videoScalingMode
+        case lockAspectRatio
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let defaults = Self.defaults
+
+        lastSavedAt = try container.decodeIfPresent(Double.self, forKey: .lastSavedAt)
+        x = try container.decodeIfPresent(Double.self, forKey: .x) ?? defaults.x
+        y = try container.decodeIfPresent(Double.self, forKey: .y) ?? defaults.y
+        width = try container.decodeIfPresent(Double.self, forKey: .width) ?? defaults.width
+        height = try container.decodeIfPresent(Double.self, forKey: .height) ?? defaults.height
+        targetScreenID = try container.decodeIfPresent(String.self, forKey: .targetScreenID)
+        cornerRadius = try container.decodeIfPresent(Double.self, forKey: .cornerRadius) ?? defaults.cornerRadius
+        mirrorCamera = try container.decodeIfPresent(Bool.self, forKey: .mirrorCamera) ?? defaults.mirrorCamera
+        cameraResolutionID = try container.decodeIfPresent(String.self, forKey: .cameraResolutionID) ?? defaults.cameraResolutionID
+        cameraFrameRate = try container.decodeIfPresent(Double.self, forKey: .cameraFrameRate)
+        videoScalingMode = try container.decodeIfPresent(VideoScalingMode.self, forKey: .videoScalingMode) ?? defaults.videoScalingMode
+
+        if let savedAspectRatio = try container.decodeIfPresent(OverlayAspectRatio.self, forKey: .aspectRatio) {
+            aspectRatio = savedAspectRatio
+        } else {
+            let wasLocked = try container.decodeIfPresent(Bool.self, forKey: .lockAspectRatio) ?? false
+            let currentRatio = height > 0 ? width / height : 16.0 / 9.0
+            aspectRatio = wasLocked && abs(currentRatio - 16.0 / 9.0) < 0.03 ? .sixteenNine : .free
+        }
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encodeIfPresent(lastSavedAt, forKey: .lastSavedAt)
+        try container.encode(x, forKey: .x)
+        try container.encode(y, forKey: .y)
+        try container.encode(width, forKey: .width)
+        try container.encode(height, forKey: .height)
+        try container.encodeIfPresent(targetScreenID, forKey: .targetScreenID)
+        try container.encode(cornerRadius, forKey: .cornerRadius)
+        try container.encode(mirrorCamera, forKey: .mirrorCamera)
+        try container.encode(cameraResolutionID, forKey: .cameraResolutionID)
+        try container.encodeIfPresent(cameraFrameRate, forKey: .cameraFrameRate)
+        try container.encode(aspectRatio, forKey: .aspectRatio)
+        try container.encode(videoScalingMode, forKey: .videoScalingMode)
+    }
 }
 
 extension Notification.Name {
