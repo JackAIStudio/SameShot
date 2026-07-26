@@ -35,6 +35,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OverlayActionHandling 
             name: .overlayDidChange,
             object: nil
         )
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(syncCameraState),
+            name: .cameraAvailabilityDidChange,
+            object: cameraController
+        )
 
         NSApp.activate(ignoringOtherApps: true)
     }
@@ -46,6 +52,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OverlayActionHandling 
         if restoreWindow.isVisible {
             restoreWindow.syncVisiblePosition(near: window.frame, on: currentScreen())
         }
+    }
+
+    @objc private func syncCameraState() {
+        cameraController.refreshAvailableResolutions()
+        panelController.setResolutionOptions(cameraController.availableResolutions)
+    }
+
+    func applicationDidBecomeActive(_ notification: Notification) {
+        guard window != nil else { return }
+        cameraController.refreshAvailableResolutions()
+        panelController.setResolutionOptions(cameraController.availableResolutions)
     }
 
     func rememberCurrentWindowState() {
@@ -119,8 +136,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OverlayActionHandling 
         }
         let menu = NSMenu()
         menu.addItem(withTitle: "显示控制面板", action: #selector(showControls), keyEquivalent: "")
-        menu.addItem(withTitle: "切到线框模式", action: #selector(switchToFrameMode), keyEquivalent: "")
-        menu.addItem(withTitle: "切到视频模式", action: #selector(switchToCameraMode), keyEquivalent: "")
         menu.addItem(withTitle: "切换点击穿透", action: #selector(toggleClickThrough), keyEquivalent: "")
         menu.addItem(withTitle: "切换锁定位置与尺寸", action: #selector(toggleLockFrame), keyEquivalent: "")
         menu.addItem(withTitle: "切换锁定视频比例", action: #selector(toggleAspectRatioLock), keyEquivalent: "")
@@ -177,27 +192,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OverlayActionHandling 
         }
     }
 
-    @objc private func switchToFrameMode() {
-        var next = window.settings
-        next.displayMode = .frame
-        apply(next)
-    }
-
-    @objc private func switchToCameraMode() {
-        var next = window.settings
-        next.displayMode = .camera
-        apply(next)
-    }
-
     @objc func toggleClickThrough() {
         var next = window.settings
         next.clickThrough.toggle()
-        apply(next)
-    }
-
-    @objc func toggleDisplayMode() {
-        var next = window.settings
-        next.displayMode = next.displayMode == .frame ? .camera : .frame
         apply(next)
     }
 

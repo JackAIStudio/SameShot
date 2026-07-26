@@ -34,31 +34,20 @@ protocol OverlayActionHandling: AnyObject {
     func toggleClickThrough()
     func toggleLockFrame()
     func toggleAspectRatioLock()
-    func toggleDisplayMode()
     func currentSettings() -> OverlaySettings
 }
 
 struct OverlaySettings: Codable {
     var lastSavedAt: Double?
-    enum DisplayMode: String, Codable {
-        case frame
-        case camera
-    }
 
     var x: Double
     var y: Double
     var width: Double
     var height: Double
-    var borderAlpha: Double
-    var fillAlpha: Double
-    var lineWidth: Double
     var clickThrough: Bool
     var targetScreenID: String?
-    var displayMode: DisplayMode
-    var cameraAlpha: Double
     var cornerRadius: Double
     var mirrorCamera: Bool
-    var showBorderInCameraMode: Bool
     var cameraResolutionID: String
     var lockFrame: Bool
     var lockAspectRatio: Bool
@@ -69,16 +58,10 @@ struct OverlaySettings: Codable {
         y: 100,
         width: 320,
         height: 180,
-        borderAlpha: 0.9,
-        fillAlpha: 0.08,
-        lineWidth: 3,
         clickThrough: false,
         targetScreenID: nil,
-        displayMode: .frame,
-        cameraAlpha: 0.96,
         cornerRadius: 18,
         mirrorCamera: true,
-        showBorderInCameraMode: true,
         cameraResolutionID: CameraResolutionOption.auto.id,
         lockFrame: false,
         lockAspectRatio: false
@@ -87,4 +70,5 @@ struct OverlaySettings: Codable {
 
 extension Notification.Name {
     static let overlayDidChange = Notification.Name("overlayDidChange")
+    static let cameraAvailabilityDidChange = Notification.Name("cameraAvailabilityDidChange")
 }

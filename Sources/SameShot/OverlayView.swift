@@ -27,8 +27,9 @@ private final class OverlayIconButton: NSButton {
 final class OverlayView: NSView {
     private let cameraContainer = NSView()
     private let previewLayer = AVCaptureVideoPreviewLayer()
-    private let noCameraLabel = NSTextField(labelWithString: "摄像头不可用")
-    private let frameLayer = CAShapeLayer()
+    private let cameraStatusContainer = NSStackView()
+    private let noCameraLabel = NSTextField(wrappingLabelWithString: "")
+    private let cameraSettingsButton = NSButton(title: "打开摄像头权限设置", target: nil, action: nil)
     private let hoverToolbarContainer = NSView()
     private let hoverToolbar = NSStackView()
     private let lockButton = OverlayToolbarButton(title: "锁定位置", target: nil, action: nil)
@@ -66,7 +67,6 @@ final class OverlayView: NSView {
         super.layout()
         cameraContainer.frame = bounds
         previewLayer.frame = cameraContainer.bounds
-        noCameraLabel.frame = bounds.insetBy(dx: 16, dy: 16)
         let sideInset = max(10, min(18, bounds.width * 0.028))
         let topInset = max(10, min(16, bounds.height * 0.05))
         let bottomInset = max(10, min(16, bounds.height * 0.05))
@@ -103,7 +103,6 @@ final class OverlayView: NSView {
             height: closeSize
         )
         styleCloseButton()
-        updateFramePath()
     }
 
     override func updateTrackingAreas() {
@@ -144,11 +143,26 @@ final class OverlayView: NSView {
         noCameraLabel.alignment = .center
         noCameraLabel.textColor = .white.withAlphaComponent(0.9)
         noCameraLabel.font = .systemFont(ofSize: 18, weight: .medium)
-        noCameraLabel.isHidden = true
-        addSubview(noCameraLabel)
+        noCameraLabel.maximumNumberOfLines = 0
 
-        frameLayer.fillColor = NSColor.clear.cgColor
-        layer?.addSublayer(frameLayer)
+        cameraSettingsButton.bezelStyle = .rounded
+        cameraSettingsButton.controlSize = .large
+        cameraSettingsButton.target = self
+        cameraSettingsButton.action = #selector(openCameraPrivacySettings)
+
+        cameraStatusContainer.orientation = .vertical
+        cameraStatusContainer.alignment = .centerX
+        cameraStatusContainer.spacing = 12
+        cameraStatusContainer.translatesAutoresizingMaskIntoConstraints = false
+        cameraStatusContainer.addArrangedSubview(noCameraLabel)
+        cameraStatusContainer.addArrangedSubview(cameraSettingsButton)
+        addSubview(cameraStatusContainer)
+        NSLayoutConstraint.activate([
+            cameraStatusContainer.centerXAnchor.constraint(equalTo: centerXAnchor),
+            cameraStatusContainer.centerYAnchor.constraint(equalTo: centerYAnchor),
+            cameraStatusContainer.leadingAnchor.constraint(greaterThanOrEqualTo: leadingAnchor, constant: 16),
+            cameraStatusContainer.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor, constant: -16)
+        ])
 
         [lockButton, ratioButton, controlsButton, hideButton].forEach {
             $0.isBordered = false
@@ -197,6 +211,13 @@ final class OverlayView: NSView {
         closeButton.alphaValue = 0.0
         addSubview(closeButton)
 
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(cameraAvailabilityDidChange),
+            name: .cameraAvailabilityDidChange,
+            object: nil
+        )
+
         applySettings()
     }
 
@@ -212,11 +233,26 @@ final class OverlayView: NSView {
     }
 
     private func reconnectCameraIfNeeded() {
-        if settings.displayMode == .camera {
-            cameraController?.attach(to: previewLayer, resolutionID: settings.cameraResolutionID)
-            noCameraLabel.isHidden = cameraController?.isAvailable ?? false
-        } else {
-            noCameraLabel.isHidden = true
+        cameraController?.attach(to: previewLayer, resolutionID: settings.cameraResolutionID)
+        updateCameraStatus()
+    }
+
+    private func updateCameraStatus() {
+        switch cameraController?.availability ?? .unavailable {
+        case .available:
+            cameraStatusContainer.isHidden = true
+        case .requestingPermission:
+            cameraStatusContainer.isHidden = false
+            noCameraLabel.stringValue = "正在请求摄像头权限…"
+            cameraSettingsButton.isHidden = true
+        case .permissionDenied:
+            cameraStatusContainer.isHidden = false
+            noCameraLabel.stringValue = "需要摄像头权限才能显示实时预览"
+            cameraSettingsButton.isHidden = false
+        case .unavailable:
+            cameraStatusContainer.isHidden = false
+            noCameraLabel.stringValue = "未检测到可用摄像头"
+            cameraSettingsButton.isHidden = true
         }
     }
 
@@ -225,9 +261,6 @@ final class OverlayView: NSView {
         layer?.masksToBounds = false
 
         cameraContainer.layer?.cornerRadius = settings.cornerRadius
-        cameraContainer.alphaValue = CGFloat(settings.cameraAlpha)
-        cameraContainer.isHidden = settings.displayMode != .camera
-        cameraContainer.layer?.backgroundColor = NSColor.black.withAlphaComponent(max(0.05, 1 - settings.cameraAlpha)).cgColor
 
         if let connection = previewLayer.connection, connection.isVideoMirroringSupported {
             connection.automaticallyAdjustsVideoMirroring = false
@@ -235,14 +268,6 @@ final class OverlayView: NSView {
         }
 
         reconnectCameraIfNeeded()
-        noCameraLabel.isHidden = !(settings.displayMode == .camera && !(cameraController?.isAvailable ?? false))
-
-        frameLayer.lineWidth = settings.lineWidth
-        frameLayer.strokeColor = NSColor.systemOrange.withAlphaComponent(settings.borderAlpha).cgColor
-        frameLayer.fillColor = settings.displayMode == .frame
-            ? NSColor.systemOrange.withAlphaComponent(settings.fillAlpha).cgColor
-            : NSColor.clear.cgColor
-        frameLayer.isHidden = settings.displayMode == .camera && !settings.showBorderInCameraMode
 
         style(button: lockButton, active: settings.lockFrame)
         style(button: ratioButton, active: settings.lockAspectRatio)
@@ -253,7 +278,15 @@ final class OverlayView: NSView {
         let mousePoint = convert(window?.mouseLocationOutsideOfEventStream ?? .zero, from: nil)
         setToolbarVisible(bounds.contains(mousePoint) && !settings.clickThrough)
         updateResizeCursor(for: mousePoint)
-        updateFramePath()
+    }
+
+    @objc private func cameraAvailabilityDidChange() {
+        reconnectCameraIfNeeded()
+    }
+
+    @objc private func openCameraPrivacySettings() {
+        guard let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Camera") else { return }
+        NSWorkspace.shared.open(url)
     }
 
     private func style(button: OverlayToolbarButton, active: Bool) {
@@ -360,13 +393,6 @@ final class OverlayView: NSView {
     private func bringSubviewToFront(_ view: NSView) {
         view.removeFromSuperview()
         addSubview(view, positioned: .above, relativeTo: noCameraLabel)
-    }
-
-    private func updateFramePath() {
-        frameLayer.frame = bounds
-        let inset = settings.lineWidth / 2
-        let rect = bounds.insetBy(dx: inset, dy: inset)
-        frameLayer.path = CGPath(roundedRect: rect, cornerWidth: settings.cornerRadius, cornerHeight: settings.cornerRadius, transform: nil)
     }
 
     @objc private func openControls() { actionHandler?.showControls() }

@@ -2,14 +2,25 @@ import AVFoundation
 import CoreMedia
 import Foundation
 
+enum CameraAvailability {
+    case available
+    case requestingPermission
+    case permissionDenied
+    case unavailable
+}
+
 @MainActor
 final class CameraSessionController: NSObject {
     private let session = AVCaptureSession()
     private var configured = false
     private var currentDevice: AVCaptureDevice?
     private var currentResolutionID: String = CameraResolutionOption.auto.id
-    private(set) var isAvailable = false
+    private(set) var availability: CameraAvailability = .unavailable
     private(set) var availableResolutions: [CameraResolutionOption] = [.auto]
+
+    var isAvailable: Bool {
+        availability == .available
+    }
 
     func attach(to previewLayer: AVCaptureVideoPreviewLayer, resolutionID: String) {
         configureIfNeeded()
@@ -24,15 +35,50 @@ final class CameraSessionController: NSObject {
     }
 
     func refreshAvailableResolutions() {
+        let previousAvailability = availability
+        let authorizationStatus = AVCaptureDevice.authorizationStatus(for: .video)
+        if currentDevice == nil,
+           (authorizationStatus == .authorized) != (availability == .available) {
+            configured = false
+        }
         if currentDevice == nil {
             configureIfNeeded()
         }
         availableResolutions = Self.resolutionOptions(for: currentDevice)
+        if availability != previousAvailability {
+            notifyAvailabilityChanged()
+        }
     }
 
     private func configureIfNeeded() {
         guard !configured else { return }
         configured = true
+        let authorizationStatus = AVCaptureDevice.authorizationStatus(for: .video)
+
+        switch authorizationStatus {
+        case .notDetermined:
+            availability = .requestingPermission
+            availableResolutions = [.auto]
+            AVCaptureDevice.requestAccess(for: .video) { [weak self] _ in
+                Task { @MainActor [weak self] in
+                    guard let self else { return }
+                    self.configured = false
+                    self.configureIfNeeded()
+                    self.notifyAvailabilityChanged()
+                }
+            }
+            return
+        case .denied, .restricted:
+            availability = .permissionDenied
+            availableResolutions = [.auto]
+            return
+        case .authorized:
+            break
+        @unknown default:
+            availability = .unavailable
+            availableResolutions = [.auto]
+            return
+        }
 
         session.beginConfiguration()
         defer {
@@ -46,16 +92,20 @@ final class CameraSessionController: NSObject {
                 ?? AVCaptureDevice.default(for: .video),
               let input = try? AVCaptureDeviceInput(device: device),
               session.canAddInput(input) else {
-            isAvailable = false
+            availability = .unavailable
             availableResolutions = [.auto]
             return
         }
 
         session.addInput(input)
         currentDevice = device
-        isAvailable = true
+        availability = .available
         availableResolutions = Self.resolutionOptions(for: device)
         updateResolutionIfNeeded(currentResolutionID)
+    }
+
+    private func notifyAvailabilityChanged() {
+        NotificationCenter.default.post(name: .cameraAvailabilityDidChange, object: self)
     }
 
     private func updateResolutionIfNeeded(_ resolutionID: String) {

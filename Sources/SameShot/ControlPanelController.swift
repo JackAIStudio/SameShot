@@ -71,7 +71,6 @@ final class DragHandleView: NSView {
 @MainActor
 final class ControlPanelController: NSWindowController {
     private weak var scrollViewRef: NSScrollView?
-    private let modeControl = NSSegmentedControl(labels: ["线框", "视频"], trackingMode: .selectOne, target: nil, action: nil)
     private let resolutionPopup = NSPopUpButton(frame: .zero, pullsDown: false)
     private let sourceSizeLabel = NSTextField(labelWithString: "来源分辨率：自动")
     private let widthHandle = DragHandleView(frame: .zero)
@@ -79,15 +78,10 @@ final class ControlPanelController: NSWindowController {
     private let widthField = NSTextField(string: "")
     private let heightField = NSTextField(string: "")
     private let ratioLockButton = NSButton(title: "未锁定", target: nil, action: nil)
-    private let borderSlider = NSSlider(value: 0.9, minValue: 0.1, maxValue: 1.0, target: nil, action: nil)
-    private let fillSlider = NSSlider(value: 0.08, minValue: 0.0, maxValue: 0.4, target: nil, action: nil)
-    private let lineSlider = NSSlider(value: 3.0, minValue: 1.0, maxValue: 10.0, target: nil, action: nil)
-    private let cameraAlphaSlider = NSSlider(value: 0.96, minValue: 0.2, maxValue: 1.0, target: nil, action: nil)
     private let cornerSlider = NSSlider(value: 18, minValue: 0, maxValue: 40, target: nil, action: nil)
     private let clickThroughButton = NSButton(checkboxWithTitle: "点击穿透", target: nil, action: nil)
     private let lockFrameButton = NSButton(checkboxWithTitle: "锁定位置与尺寸", target: nil, action: nil)
     private let mirrorButton = NSButton(checkboxWithTitle: "镜像视频", target: nil, action: nil)
-    private let showBorderInCameraButton = NSButton(checkboxWithTitle: "视频模式保留边框", target: nil, action: nil)
     private let infoLabel = NSTextField(labelWithString: "")
 
     private weak var overlayWindow: OverlayWindow?
@@ -129,18 +123,12 @@ final class ControlPanelController: NSWindowController {
 
     func push(settings: OverlaySettings) {
         self.settings = settings
-        modeControl.selectedSegment = settings.displayMode == .frame ? 0 : 1
         widthField.stringValue = String(Int(settings.width.rounded()))
         heightField.stringValue = String(Int(settings.height.rounded()))
-        borderSlider.doubleValue = settings.borderAlpha
-        fillSlider.doubleValue = settings.fillAlpha
-        lineSlider.doubleValue = settings.lineWidth
-        cameraAlphaSlider.doubleValue = settings.cameraAlpha
         cornerSlider.doubleValue = settings.cornerRadius
         clickThroughButton.state = settings.clickThrough ? .on : .off
         lockFrameButton.state = settings.lockFrame ? .on : .off
         mirrorButton.state = settings.mirrorCamera ? .on : .off
-        showBorderInCameraButton.state = settings.showBorderInCameraMode ? .on : .off
         ratioLockButton.title = settings.lockAspectRatio ? "已锁定" : "未锁定"
         ratioLockButton.toolTip = settings.lockAspectRatio ? "已锁定当前比例" : "点击锁定当前比例"
         if let idx = resolutionOptions.firstIndex(where: { $0.id == settings.cameraResolutionID }) {
@@ -182,7 +170,7 @@ final class ControlPanelController: NSWindowController {
             scrollView.bottomAnchor.constraint(equalTo: root.bottomAnchor)
         ])
 
-        let documentView = NSView(frame: NSRect(x: 0, y: 0, width: 520, height: 980))
+        let documentView = NSView(frame: NSRect(x: 0, y: 0, width: 520, height: 720))
         scrollView.documentView = documentView
 
         let stack = NSStackView()
@@ -200,8 +188,6 @@ final class ControlPanelController: NSWindowController {
             stack.bottomAnchor.constraint(equalTo: documentView.bottomAnchor, constant: -20)
         ])
 
-        modeControl.target = self
-        modeControl.action = #selector(changeDisplayMode)
         resolutionPopup.target = self
         resolutionPopup.action = #selector(changeResolution)
         widthField.target = self
@@ -214,18 +200,14 @@ final class ControlPanelController: NSWindowController {
         heightHandle.title = "高 ←→"
         widthHandle.onDragDelta = { [weak self] delta in self?.adjustPreviewSize(delta: delta, forWidth: true) }
         heightHandle.onDragDelta = { [weak self] delta in self?.adjustPreviewSize(delta: delta, forWidth: false) }
-        [borderSlider, fillSlider, lineSlider, cameraAlphaSlider, cornerSlider].forEach {
-            $0.target = self
-            $0.action = #selector(updateSliders)
-        }
+        cornerSlider.target = self
+        cornerSlider.action = #selector(updateCornerRadius)
         clickThroughButton.target = self
         clickThroughButton.action = #selector(toggleClickThrough)
         lockFrameButton.target = self
         lockFrameButton.action = #selector(toggleLockFrame)
         mirrorButton.target = self
-        mirrorButton.action = #selector(toggleFlags)
-        showBorderInCameraButton.target = self
-        showBorderInCameraButton.action = #selector(toggleFlags)
+        mirrorButton.action = #selector(toggleMirror)
 
         [widthField, heightField].forEach {
             $0.alignment = .center
@@ -240,9 +222,6 @@ final class ControlPanelController: NSWindowController {
         ratioLockButton.bezelStyle = .rounded
         ratioLockButton.controlSize = .large
         ratioLockButton.font = .systemFont(ofSize: 13, weight: .medium)
-
-        stack.addArrangedSubview(sectionLabel("显示模式"))
-        stack.addArrangedSubview(modeControl)
 
         stack.addArrangedSubview(sectionLabel("来源视频"))
         resolutionPopup.translatesAutoresizingMaskIntoConstraints = false
@@ -277,21 +256,12 @@ final class ControlPanelController: NSWindowController {
         stack.addArrangedSubview(heightRow)
         stack.addArrangedSubview(helpLabel("左侧拖移区只负责鼠标拖动改值；右侧输入框只负责正常输入。"))
 
-        stack.addArrangedSubview(sectionLabel("边框透明度"))
-        stack.addArrangedSubview(fullWidth(borderSlider))
-        stack.addArrangedSubview(sectionLabel("线框填充透明度"))
-        stack.addArrangedSubview(fullWidth(fillSlider))
-        stack.addArrangedSubview(sectionLabel("边框粗细"))
-        stack.addArrangedSubview(fullWidth(lineSlider))
-        stack.addArrangedSubview(sectionLabel("视频透明度"))
-        stack.addArrangedSubview(fullWidth(cameraAlphaSlider))
         stack.addArrangedSubview(sectionLabel("圆角"))
         stack.addArrangedSubview(fullWidth(cornerSlider))
 
         stack.addArrangedSubview(clickThroughButton)
         stack.addArrangedSubview(lockFrameButton)
         stack.addArrangedSubview(mirrorButton)
-        stack.addArrangedSubview(showBorderInCameraButton)
         stack.addArrangedSubview(infoLabel)
 
         let actionRow = NSStackView()
@@ -362,10 +332,6 @@ final class ControlPanelController: NSWindowController {
         return button
     }
 
-    @objc private func changeDisplayMode() {
-        mutateSettings { $0.displayMode = modeControl.selectedSegment == 1 ? .camera : .frame }
-    }
-
     @objc private func changeResolution() {
         let idx = resolutionPopup.indexOfSelectedItem
         guard idx >= 0 && idx < resolutionOptions.count else { return }
@@ -406,14 +372,8 @@ final class ControlPanelController: NSWindowController {
         }
     }
 
-    @objc private func updateSliders() {
-        mutateSettings {
-            $0.borderAlpha = borderSlider.doubleValue
-            $0.fillAlpha = fillSlider.doubleValue
-            $0.lineWidth = lineSlider.doubleValue
-            $0.cameraAlpha = cameraAlphaSlider.doubleValue
-            $0.cornerRadius = cornerSlider.doubleValue
-        }
+    @objc private func updateCornerRadius() {
+        mutateSettings { $0.cornerRadius = cornerSlider.doubleValue }
     }
 
     @objc private func toggleClickThrough() {
@@ -428,11 +388,8 @@ final class ControlPanelController: NSWindowController {
         mutateSettings { $0.lockAspectRatio.toggle() }
     }
 
-    @objc private func toggleFlags() {
-        mutateSettings {
-            $0.mirrorCamera = (mirrorButton.state == .on)
-            $0.showBorderInCameraMode = (showBorderInCameraButton.state == .on)
-        }
+    @objc private func toggleMirror() {
+        mutateSettings { $0.mirrorCamera = (mirrorButton.state == .on) }
     }
 
     @objc private func snapToBottomRight() {
