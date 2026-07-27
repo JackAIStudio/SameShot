@@ -4,6 +4,8 @@
 
 ## [未发布]
 
+## [0.1.3] - 2026-07-27
+
 ### 变更
 
 - 新增原生 macOS App Xcode 工程与 `SameShot App` 共享 Scheme，开发运行使用带固定 Bundle ID 和完整资源的 Debug `.app`

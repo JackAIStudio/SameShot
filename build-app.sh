@@ -3,7 +3,7 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")" && pwd)"
 APP_NAME="SameShot"
-VERSION="0.1.2"
+VERSION="0.1.3"
 TEAM_ID="92K6CKZ4KM"
 SIGN_IDENTITY="Developer ID Application: jieke wu (${TEAM_ID})"
 # Local keychain profile name used by notarytool
@@ -66,9 +66,9 @@ cat > "$PLIST" <<'PLIST'
   <key>CFBundlePackageType</key>
   <string>APPL</string>
   <key>CFBundleShortVersionString</key>
-  <string>0.1.2</string>
+  <string>0.1.3</string>
   <key>CFBundleVersion</key>
-  <string>3</string>
+  <string>4</string>
   <key>LSMinimumSystemVersion</key>
   <string>13.0</string>
   <key>NSHighResolutionCapable</key>
