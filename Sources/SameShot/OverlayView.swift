@@ -47,6 +47,7 @@ final class OverlayView: NSView {
     override func mouseExited(with event: NSEvent) {
         currentResizeCursor?.pop()
         currentResizeCursor = nil
+        setResizeAffordanceVisible(false)
     }
 
     override func mouseMoved(with event: NSEvent) {
@@ -104,7 +105,17 @@ final class OverlayView: NSView {
             resolutionID: settings.cameraResolutionID,
             frameRate: settings.cameraFrameRate
         )
+        applyVideoConnectionSettings()
         updateCameraStatus()
+    }
+
+    private func applyVideoConnectionSettings() {
+        guard let connection = previewLayer.connection,
+              connection.isVideoMirroringSupported else {
+            return
+        }
+        connection.automaticallyAdjustsVideoMirroring = false
+        connection.isVideoMirrored = settings.mirrorCamera
     }
 
     private func updateCameraStatus() {
@@ -133,11 +144,6 @@ final class OverlayView: NSView {
         cameraContainer.layer?.cornerRadius = settings.cornerRadius
         previewLayer.videoGravity = settings.videoScalingMode == .fill ? .resizeAspectFill : .resizeAspect
 
-        if let connection = previewLayer.connection, connection.isVideoMirroringSupported {
-            connection.automaticallyAdjustsVideoMirroring = false
-            connection.isVideoMirrored = settings.mirrorCamera
-        }
-
         reconnectCameraIfNeeded()
     }
 
@@ -154,6 +160,7 @@ final class OverlayView: NSView {
         guard bounds.contains(point) else {
             currentResizeCursor?.pop()
             currentResizeCursor = nil
+            setResizeAffordanceVisible(false)
             return
         }
 
@@ -164,8 +171,10 @@ final class OverlayView: NSView {
         let nearTop = point.y >= bounds.height - edge
 
         let nextCursor: NSCursor?
-        if nearLeft || nearRight || nearTop || nearBottom {
-            nextCursor = .openHand
+        if nearLeft || nearRight {
+            nextCursor = .resizeLeftRight
+        } else if nearTop || nearBottom {
+            nextCursor = .resizeUpDown
         } else {
             nextCursor = nil
         }
@@ -178,5 +187,11 @@ final class OverlayView: NSView {
             nextCursor.push()
             currentResizeCursor = nextCursor
         }
+        setResizeAffordanceVisible(nextCursor != nil)
+    }
+
+    private func setResizeAffordanceVisible(_ isVisible: Bool) {
+        layer?.borderColor = NSColor.controlAccentColor.withAlphaComponent(0.75).cgColor
+        layer?.borderWidth = isVisible ? 1.5 : 0
     }
 }

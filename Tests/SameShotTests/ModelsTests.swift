@@ -4,6 +4,11 @@ import CoreMedia
 import XCTest
 
 final class ModelsTests: XCTestCase {
+    func testAspectRatioTitlesDescribeWindowBehavior() {
+        XCTAssertEqual(OverlayAspectRatio.source.title, "原始画面比例（推荐）")
+        XCTAssertEqual(OverlayAspectRatio.free.title, "自由调整")
+    }
+
     func testLegacyLockedSettingsMigrateToSixteenNine() throws {
         let data = try JSONSerialization.data(withJSONObject: [
             "x": 100,
@@ -95,6 +100,40 @@ final class ModelsTests: XCTestCase {
             )
 
             XCTAssertEqual(duration, minimum)
+        }
+    }
+
+    func testSavedCaptureQualitySurvivesTemporaryCameraUnavailability() async {
+        await MainActor.run {
+            var saved = OverlaySettings.defaults
+            saved.cameraResolutionID = "1920x1080"
+            saved.cameraFrameRate = 30
+
+            let sanitized = AppDelegate.sanitizedCameraSettings(
+                saved,
+                availableResolutions: [.auto],
+                cameraIsAvailable: false
+            )
+
+            XCTAssertEqual(sanitized.cameraResolutionID, "1920x1080")
+            XCTAssertEqual(sanitized.cameraFrameRate, 30)
+        }
+    }
+
+    func testUnsupportedCaptureQualityFallsBackAfterCameraBecomesAvailable() async {
+        await MainActor.run {
+            var saved = OverlaySettings.defaults
+            saved.cameraResolutionID = "1920x1080"
+            saved.cameraFrameRate = 30
+
+            let sanitized = AppDelegate.sanitizedCameraSettings(
+                saved,
+                availableResolutions: [.auto],
+                cameraIsAvailable: true
+            )
+
+            XCTAssertEqual(sanitized.cameraResolutionID, CameraResolutionOption.auto.id)
+            XCTAssertNil(sanitized.cameraFrameRate)
         }
     }
 }

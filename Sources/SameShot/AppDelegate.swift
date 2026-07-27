@@ -127,12 +127,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OverlayVisibilityHandl
     }
 
     private func sanitizedCameraSettings(_ current: OverlaySettings) -> OverlaySettings {
+        Self.sanitizedCameraSettings(
+            current,
+            availableResolutions: cameraController.availableResolutions,
+            cameraIsAvailable: cameraController.isAvailable
+        )
+    }
+
+    static func sanitizedCameraSettings(
+        _ current: OverlaySettings,
+        availableResolutions: [CameraResolutionOption],
+        cameraIsAvailable: Bool
+    ) -> OverlaySettings {
+        guard cameraIsAvailable else { return current }
+
         var updated = current
         guard current.cameraResolutionID != CameraResolutionOption.auto.id else {
             updated.cameraFrameRate = nil
             return updated
         }
-        guard let option = cameraController.availableResolutions.first(where: {
+        guard let option = availableResolutions.first(where: {
             $0.id == current.cameraResolutionID
         }),
         option.isPictureInPictureQualityPreset else {

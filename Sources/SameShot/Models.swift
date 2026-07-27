@@ -56,7 +56,7 @@ enum OverlayAspectRatio: String, Codable, CaseIterable {
 
     var title: String {
         switch self {
-        case .source: "跟随摄像头（推荐）"
+        case .source: "原始画面比例（推荐）"
         case .sixteenNine: "16:9（横向）"
         case .fourThree: "4:3（传统）"
         case .square: "1:1（方形）"

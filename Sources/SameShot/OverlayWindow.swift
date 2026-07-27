@@ -2,6 +2,8 @@ import AppKit
 
 @MainActor
 final class OverlayWindow: NSPanel {
+    private static let minimumDimension: CGFloat = 80
+
     var settings = OverlaySettings.defaults {
         didSet {
             updateBehaviors()
@@ -37,6 +39,10 @@ final class OverlayWindow: NSPanel {
         isReleasedWhenClosed = false
         isMovableByWindowBackground = true
         acceptsMouseMovedEvents = true
+        contentMinSize = NSSize(
+            width: Self.minimumDimension,
+            height: Self.minimumDimension
+        )
         contentView = overlayView
         overlayView.cameraController = cameraController
         overlayView.settings = settings
@@ -88,6 +94,17 @@ final class OverlayWindow: NSPanel {
         apply(next, preservePosition: false)
     }
 
+    func resetToDefaultSize() {
+        var next = settings
+        next.width = OverlaySettings.defaults.width
+        if let ratio = resolvedAspectRatio(), ratio > 0 {
+            next.height = max(Self.minimumDimension, next.width / ratio)
+        } else {
+            next.height = OverlaySettings.defaults.height
+        }
+        apply(next, preservePosition: false)
+    }
+
     private func installWindowObserversIfNeeded() {
         guard !observersInstalled else { return }
         observersInstalled = true
@@ -116,15 +133,32 @@ final class OverlayWindow: NSPanel {
     }
 
     private func adjustedFrameRect(_ frameRect: NSRect) -> NSRect {
-        guard let ratio = resolvedAspectRatio(), ratio > 0 else { return frameRect }
+        guard let ratio = resolvedAspectRatio(), ratio > 0 else {
+            return NSRect(
+                x: frameRect.origin.x,
+                y: frameRect.origin.y,
+                width: max(frameRect.width, Self.minimumDimension),
+                height: max(frameRect.height, Self.minimumDimension)
+            )
+        }
         let widthDelta = abs(frameRect.width - frame.width)
         let heightDelta = abs(frameRect.height - frame.height)
         if widthDelta >= heightDelta {
-            let newHeight = frameRect.width / ratio
-            return NSRect(x: frameRect.origin.x, y: frameRect.origin.y, width: frameRect.width, height: newHeight)
+            let newWidth = max(
+                frameRect.width,
+                Self.minimumDimension,
+                Self.minimumDimension * ratio
+            )
+            let newHeight = newWidth / ratio
+            return NSRect(x: frameRect.origin.x, y: frameRect.origin.y, width: newWidth, height: newHeight)
         } else {
-            let newWidth = frameRect.height * ratio
-            return NSRect(x: frameRect.origin.x, y: frameRect.origin.y, width: newWidth, height: frameRect.height)
+            let newHeight = max(
+                frameRect.height,
+                Self.minimumDimension,
+                Self.minimumDimension / ratio
+            )
+            let newWidth = newHeight * ratio
+            return NSRect(x: frameRect.origin.x, y: frameRect.origin.y, width: newWidth, height: newHeight)
         }
     }
 

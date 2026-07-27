@@ -8,20 +8,15 @@ final class ControlPanelController: NSWindowController {
     private let sourceInfoLabel = NSTextField(wrappingLabelWithString: "")
     private let captureHintLabel = NSTextField(wrappingLabelWithString: "")
 
-    private let sizePresetControl = NSSegmentedControl(
-        labels: ["小 240", "中 320", "大 480", "自定义"],
-        trackingMode: .selectOne,
-        target: nil,
-        action: nil
-    )
-    private let customSizeStack = NSStackView()
-    private weak var customSizeRow: NSView?
-    private let widthField = NSTextField(string: "")
-    private let heightField = NSTextField(string: "")
-    private let sizeInfoLabel = NSTextField(wrappingLabelWithString: "")
+    private let sizeControlStack = NSStackView()
+    private let resizeHintLabel = NSTextField(labelWithString: "拖动画中画边缘调整大小")
+    private let resetSizeButton = NSButton(title: "恢复默认大小", target: nil, action: nil)
     private let aspectRatioPopup = NSPopUpButton(frame: .zero, pullsDown: false)
+    private let aspectRatioHintLabel = NSTextField(wrappingLabelWithString: "")
     private let scalingModePopup = NSPopUpButton(frame: .zero, pullsDown: false)
     private let scalingHintLabel = NSTextField(wrappingLabelWithString: "")
+    private weak var scalingModeRow: NSView?
+    private weak var scalingHintRow: NSView?
 
     private let cornerSlider = NSSlider(value: 18, minValue: 0, maxValue: 40, target: nil, action: nil)
     private let mirrorButton = NSButton(checkboxWithTitle: "镜像画面", target: nil, action: nil)
@@ -72,14 +67,10 @@ final class ControlPanelController: NSWindowController {
         updateCaptureHint()
         updateSourceInfo()
 
-        widthField.stringValue = String(Int(settings.width.rounded()))
-        heightField.stringValue = String(Int(settings.height.rounded()))
-        updateSizePresetSelection()
-        updateSizeInfo()
-
         if let index = OverlayAspectRatio.allCases.firstIndex(of: settings.aspectRatio) {
             aspectRatioPopup.selectItem(at: index)
         }
+        updateAspectRatioHint()
         if let index = VideoScalingMode.allCases.firstIndex(of: settings.videoScalingMode) {
             scalingModePopup.selectItem(at: index)
         }
@@ -147,9 +138,9 @@ final class ControlPanelController: NSWindowController {
             $0.id == settings.cameraResolutionID
         }
         captureHintLabel.stringValue = switch (selectedOption?.width, selectedOption?.height) {
-        case (640, 480): "更省资源，适合小号画中画"
+        case (640, 480): "更省资源，适合较小的画中画"
         case (1280, 720): "清晰度与性能均衡，适合大多数画中画"
-        case (1920, 1080): "画面更清晰，适合大号画中画"
+        case (1920, 1080): "画面更清晰，适合较大的画中画"
         default: "优先使用 720p · 30 fps，不支持时自动选择接近规格"
         }
     }
@@ -226,23 +217,20 @@ final class ControlPanelController: NSWindowController {
         stack.setCustomSpacing(24, after: sourceInfoRow)
 
         stack.addArrangedSubview(sectionLabel("画中画"))
-        stack.addArrangedSubview(formRow(title: "大小", control: sizePresetControl))
+        sizeControlStack.orientation = .horizontal
+        sizeControlStack.alignment = .centerY
+        sizeControlStack.spacing = 10
+        sizeControlStack.addArrangedSubview(resizeHintLabel)
+        sizeControlStack.addArrangedSubview(resetSizeButton)
+        stack.addArrangedSubview(formRow(title: "大小", control: sizeControlStack))
 
-        customSizeStack.orientation = .horizontal
-        customSizeStack.alignment = .centerY
-        customSizeStack.spacing = 8
-        customSizeStack.addArrangedSubview(widthField)
-        customSizeStack.addArrangedSubview(label("×"))
-        customSizeStack.addArrangedSubview(heightField)
-        let customSizeRow = formRow(title: "自定义", control: customSizeStack)
-        self.customSizeRow = customSizeRow
-        stack.addArrangedSubview(customSizeRow)
-        stack.addArrangedSubview(formRow(title: "", control: sizeInfoLabel))
-
-        stack.addArrangedSubview(formRow(title: "比例", control: aspectRatioPopup))
+        stack.addArrangedSubview(formRow(title: "画面比例", control: aspectRatioPopup))
+        stack.addArrangedSubview(formRow(title: "", control: aspectRatioHintLabel))
         let scalingModeRow = formRow(title: "显示方式", control: scalingModePopup)
+        self.scalingModeRow = scalingModeRow
         stack.addArrangedSubview(scalingModeRow)
         let scalingHintRow = formRow(title: "", control: scalingHintLabel)
+        self.scalingHintRow = scalingHintRow
         stack.addArrangedSubview(scalingHintRow)
         stack.setCustomSpacing(24, after: scalingHintRow)
 
@@ -255,20 +243,12 @@ final class ControlPanelController: NSWindowController {
         captureQualityPopup.target = self
         captureQualityPopup.action = #selector(changeCaptureQuality)
 
-        sizePresetControl.target = self
-        sizePresetControl.action = #selector(changeSizePreset)
-
-        [widthField, heightField].forEach {
-            $0.alignment = .center
-            $0.controlSize = .large
-            $0.font = .monospacedDigitSystemFont(ofSize: 14, weight: .medium)
-            $0.translatesAutoresizingMaskIntoConstraints = false
-            $0.widthAnchor.constraint(equalToConstant: 92).isActive = true
-            $0.target = self
-            $0.action = #selector(updateCustomSize)
-        }
-        widthField.placeholderString = "宽度"
-        heightField.placeholderString = "高度"
+        resizeHintLabel.font = .systemFont(ofSize: 12)
+        resizeHintLabel.textColor = .secondaryLabelColor
+        resetSizeButton.controlSize = .small
+        resetSizeButton.bezelStyle = .rounded
+        resetSizeButton.target = self
+        resetSizeButton.action = #selector(resetOverlaySize)
 
         aspectRatioPopup.addItems(withTitles: OverlayAspectRatio.allCases.map(\ .title))
         aspectRatioPopup.target = self
@@ -283,7 +263,7 @@ final class ControlPanelController: NSWindowController {
         mirrorButton.target = self
         mirrorButton.action = #selector(toggleMirror)
 
-        [captureHintLabel, sourceInfoLabel, sizeInfoLabel, scalingHintLabel].forEach {
+        [captureHintLabel, sourceInfoLabel, aspectRatioHintLabel, scalingHintLabel].forEach {
             $0.font = .systemFont(ofSize: 12)
             $0.textColor = .secondaryLabelColor
             $0.preferredMaxLayoutWidth = 280
@@ -295,38 +275,23 @@ final class ControlPanelController: NSWindowController {
             $0.translatesAutoresizingMaskIntoConstraints = false
             $0.widthAnchor.constraint(equalToConstant: 280).isActive = true
         }
-        sizePresetControl.translatesAutoresizingMaskIntoConstraints = false
-        sizePresetControl.widthAnchor.constraint(equalToConstant: 280).isActive = true
+        sizeControlStack.translatesAutoresizingMaskIntoConstraints = false
+        sizeControlStack.widthAnchor.constraint(equalToConstant: 280).isActive = true
         cornerSlider.translatesAutoresizingMaskIntoConstraints = false
         cornerSlider.widthAnchor.constraint(equalToConstant: 280).isActive = true
     }
 
-    private func updateSizePresetSelection() {
-        let presetWidths: [Double] = [240, 320, 480]
-        if let index = presetWidths.firstIndex(where: { abs($0 - settings.width) < 1 }) {
-            sizePresetControl.selectedSegment = index
-            customSizeRow?.isHidden = true
-        } else {
-            sizePresetControl.selectedSegment = 3
-            customSizeRow?.isHidden = false
-        }
-    }
-
-    private func updateSizeInfo() {
-        let width = Int(settings.width.rounded())
-        let height = Int(settings.height.rounded())
-        let presetDescription = switch sizePresetControl.selectedSegment {
-        case 0: " · 小号"
-        case 1: " · 中号（默认）"
-        case 2: " · 大号"
-        default: ""
-        }
-        sizeInfoLabel.stringValue = "当前尺寸：\(width) × \(height)\(presetDescription)；预设数字为窗口宽度"
+    private func updateAspectRatioHint() {
+        aspectRatioHintLabel.stringValue = settings.aspectRatio == .free
+            ? "可分别调整窗口宽度和高度"
+            : "拖动边缘时会保持所选比例"
     }
 
     private func updateScalingHint() {
-        if settings.aspectRatio == .source {
-            scalingHintLabel.stringValue = "跟随摄像头比例时，通常不会发生裁切或留边"
+        let usesOriginalAspectRatio = settings.aspectRatio == .source
+        scalingModeRow?.isHidden = usesOriginalAspectRatio
+        scalingHintRow?.isHidden = usesOriginalAspectRatio
+        if usesOriginalAspectRatio {
             return
         }
         scalingHintLabel.stringValue = switch settings.videoScalingMode {
@@ -350,13 +315,6 @@ final class ControlPanelController: NSWindowController {
     private func sectionLabel(_ text: String) -> NSTextField {
         let field = NSTextField(labelWithString: text)
         field.font = .systemFont(ofSize: 15, weight: .semibold)
-        return field
-    }
-
-    private func label(_ text: String) -> NSTextField {
-        let field = NSTextField(labelWithString: text)
-        field.font = .systemFont(ofSize: 13)
-        field.textColor = .secondaryLabelColor
         return field
     }
 
@@ -389,49 +347,8 @@ final class ControlPanelController: NSWindowController {
         alignWindowToCameraSourceIfNeeded()
     }
 
-    @objc private func changeSizePreset() {
-        let index = sizePresetControl.selectedSegment
-        guard index >= 0 else { return }
-        guard index < 3 else {
-            customSizeRow?.isHidden = false
-            return
-        }
-
-        let widths: [Double] = [240, 320, 480]
-        mutateSettings(preservePosition: false) { settings in
-            let ratio = resolvedAspectRatio(for: settings)
-            settings.width = widths[index]
-            settings.height = max(80, settings.width / ratio)
-        }
-    }
-
-    @objc private func updateCustomSize() {
-        guard let width = Double(widthField.stringValue),
-              let height = Double(heightField.stringValue),
-              width >= 80,
-              height >= 80 else {
-            push(settings: settings)
-            return
-        }
-
-        let widthFocused = window?.firstResponder === widthField.currentEditor()
-        let heightFocused = window?.firstResponder === heightField.currentEditor()
-        mutateSettings(preservePosition: false) { settings in
-            guard settings.aspectRatio != .free else {
-                settings.width = width
-                settings.height = height
-                return
-            }
-
-            let ratio = resolvedAspectRatio(for: settings)
-            if heightFocused && !widthFocused {
-                settings.height = height
-                settings.width = max(80, height * ratio)
-            } else {
-                settings.width = width
-                settings.height = max(80, width / ratio)
-            }
-        }
+    @objc private func resetOverlaySize() {
+        overlayWindow?.resetToDefaultSize()
     }
 
     @objc private func changeAspectRatio() {
