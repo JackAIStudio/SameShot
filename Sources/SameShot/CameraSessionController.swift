@@ -185,30 +185,12 @@ final class CameraSessionController: NSObject {
     static func automaticResolutionOption(
         from options: [CameraResolutionOption]
     ) -> CameraResolutionOption? {
-        let customOptions = options.filter { $0.id != CameraResolutionOption.auto.id }
-        if let preferred = customOptions.first(where: {
-            $0.width == 1280 && $0.height == 720
-        }) {
-            return preferred
+        let customOptions = options.filter {
+            $0.id != CameraResolutionOption.auto.id &&
+                $0.width != nil &&
+                $0.height != nil
         }
-
-        let targetWidth = 1280.0
-        let targetHeight = 720.0
-        return customOptions.min { lhs, rhs in
-            guard let lhsWidth = lhs.width,
-                  let lhsHeight = lhs.height,
-                  let rhsWidth = rhs.width,
-                  let rhsHeight = rhs.height else {
-                return false
-            }
-            let lhsDistance =
-                abs(Double(lhsWidth) - targetWidth) +
-                abs(Double(lhsHeight) - targetHeight)
-            let rhsDistance =
-                abs(Double(rhsWidth) - targetWidth) +
-                abs(Double(rhsHeight) - targetHeight)
-            return lhsDistance < rhsDistance
-        }
+        return sortedByIncreasingResolution(customOptions).first
     }
 
     static func resolutionOptions(for device: AVCaptureDevice?) -> [CameraResolutionOption] {
@@ -237,16 +219,25 @@ final class CameraSessionController: NSObject {
                 height: key.height,
                 frameRates: uniqueRates
             )
-        }.sorted { lhs, rhs in
+        }
+
+        return [.auto] + sortedByIncreasingResolution(customOptions)
+    }
+
+    static func sortedByIncreasingResolution(
+        _ options: [CameraResolutionOption]
+    ) -> [CameraResolutionOption] {
+        options.sorted { lhs, rhs in
             let lhsPixels = Int64(lhs.width ?? 0) * Int64(lhs.height ?? 0)
             let rhsPixels = Int64(rhs.width ?? 0) * Int64(rhs.height ?? 0)
             if lhsPixels == rhsPixels {
-                return (lhs.width ?? 0) > (rhs.width ?? 0)
+                if lhs.width == rhs.width {
+                    return (lhs.height ?? 0) < (rhs.height ?? 0)
+                }
+                return (lhs.width ?? 0) < (rhs.width ?? 0)
             }
-            return lhsPixels > rhsPixels
+            return lhsPixels < rhsPixels
         }
-
-        return [.auto] + customOptions
     }
 
     private static func userFacingFrameRates(for range: AVFrameRateRange) -> [Double] {

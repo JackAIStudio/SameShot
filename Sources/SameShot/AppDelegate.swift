@@ -148,8 +148,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OverlayVisibilityHandl
         }
         guard let option = availableResolutions.first(where: {
             $0.id == current.cameraResolutionID
-        }),
-        option.isPictureInPictureQualityPreset else {
+        }) else {
             updated.cameraResolutionID = CameraResolutionOption.auto.id
             updated.cameraFrameRate = nil
             return updated

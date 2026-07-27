@@ -81,25 +81,17 @@ final class ControlPanelController: NSWindowController {
     }
 
     private var displayedCaptureQualityOptions: [CameraResolutionOption] {
-        var options: [CameraResolutionOption] = [.auto]
-        let dimensions: [(Int32, Int32)] = [
-            (640, 480),
-            (1280, 720),
-            (1920, 1080)
-        ]
-        for (width, height) in dimensions {
-            if let option = resolutionOptions.first(where: {
-                $0.width == width && $0.height == height
-            }) {
-                options.append(option)
-            }
+        let cameraOptions = resolutionOptions.filter {
+            $0.id != CameraResolutionOption.auto.id &&
+                $0.width != nil &&
+                $0.height != nil
         }
-        return options
+        return [.auto] + CameraSessionController.sortedByIncreasingResolution(cameraOptions)
     }
 
     private func reloadCaptureQualityMenu() {
         captureQualityPopup.removeAllItems()
-        captureQualityPopup.addItems(withTitles: displayedCaptureQualityOptions.map(Self.captureQualityTitle))
+        captureQualityPopup.addItems(withTitles: displayedCaptureQualityOptions.map(captureQualityTitle))
         selectCurrentCaptureQuality()
     }
 
@@ -137,21 +129,63 @@ final class ControlPanelController: NSWindowController {
         let selectedOption = resolutionOptions.first {
             $0.id == settings.cameraResolutionID
         }
-        captureHintLabel.stringValue = switch (selectedOption?.width, selectedOption?.height) {
-        case (640, 480): "更省资源，适合较小的画中画"
-        case (1280, 720): "清晰度与性能均衡，适合大多数画中画"
-        case (1920, 1080): "画面更清晰，适合较大的画中画"
-        default: "优先使用 720p · 30 fps，不支持时自动选择接近规格"
+        guard selectedOption?.id != CameraResolutionOption.auto.id,
+              let selectedOption else {
+            if let recommended = CameraSessionController.automaticResolutionOption(
+                from: resolutionOptions
+            ) {
+                captureHintLabel.stringValue =
+                    "优先使用最低分辨率 \(recommended.label)，帧率自动选择最接近 30 fps"
+            } else {
+                captureHintLabel.stringValue = "优先使用摄像头可用的最低分辨率与接近 30 fps 的帧率"
+            }
+            return
         }
+        captureHintLabel.stringValue =
+            "使用摄像头原生\(Self.captureShapeTitle(selectedOption))画面，帧率自动选择最接近 30 fps"
     }
 
-    private static func captureQualityTitle(_ option: CameraResolutionOption) -> String {
-        switch (option.width, option.height) {
-        case (640, 480): "480p（更省资源）"
-        case (1280, 720): "720p（均衡）"
-        case (1920, 1080): "1080p（更清晰）"
-        default: "自动（推荐：720p / 30 fps）"
+    private func captureQualityTitle(_ option: CameraResolutionOption) -> String {
+        if option.id == CameraResolutionOption.auto.id {
+            guard let recommended = CameraSessionController.automaticResolutionOption(
+                from: resolutionOptions
+            ) else {
+                return "自动（推荐最低分辨率）"
+            }
+            let frameRate = recommended.preferredFrameRate.map {
+                " / \(Self.frameRateTitle($0))"
+            } ?? ""
+            return "自动（推荐：\(recommended.label)\(frameRate)）"
         }
+        guard let width = option.width,
+              let height = option.height else {
+            return option.label
+        }
+        return "\(width) × \(height)（\(Self.captureAspectTitle(width: width, height: height))）"
+    }
+
+    private static func captureShapeTitle(_ option: CameraResolutionOption) -> String {
+        guard let width = option.width, let height = option.height else { return "" }
+        if width == height {
+            return "方形"
+        }
+        return width > height ? "横屏" : "竖屏"
+    }
+
+    private static func captureAspectTitle(width: Int32, height: Int32) -> String {
+        guard height > 0 else { return "原始比例" }
+        let ratio = Double(width) / Double(height)
+        let candidates: [(ratio: Double, title: String)] = [
+            (16.0 / 9.0, "16:9 横屏"),
+            (4.0 / 3.0, "4:3 横屏"),
+            (1.0, "1:1 方形"),
+            (3.0 / 4.0, "3:4 竖屏"),
+            (9.0 / 16.0, "9:16 竖屏")
+        ]
+        if let match = candidates.first(where: { abs(ratio - $0.ratio) < 0.02 }) {
+            return match.title
+        }
+        return width > height ? "横屏" : "竖屏"
     }
 
     private static func frameRateTitle(_ frameRate: Double) -> String {

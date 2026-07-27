@@ -58,10 +58,51 @@ final class ModelsTests: XCTestCase {
         XCTAssertTrue(option.supports(frameRate: 30))
         XCTAssertEqual(option.matchingFrameRate(for: 30), 29.97)
         XCTAssertFalse(option.supports(frameRate: 50))
-        XCTAssertTrue(option.isPictureInPictureQualityPreset)
     }
 
-    func testAutomaticCapturePrefers720pAtThirtyFPS() async {
+    func testCaptureResolutionsAreSortedFromSmallestToLargest() async {
+        await MainActor.run {
+            let options = [
+                CameraResolutionOption(
+                    id: "1552x1552",
+                    label: "1552 × 1552",
+                    width: 1552,
+                    height: 1552,
+                    frameRates: [30]
+                ),
+                CameraResolutionOption(
+                    id: "1920x1080",
+                    label: "1920 × 1080",
+                    width: 1920,
+                    height: 1080,
+                    frameRates: [30]
+                ),
+                CameraResolutionOption(
+                    id: "640x480",
+                    label: "640 × 480",
+                    width: 640,
+                    height: 480,
+                    frameRates: [30]
+                ),
+                CameraResolutionOption(
+                    id: "1080x1920",
+                    label: "1080 × 1920",
+                    width: 1080,
+                    height: 1920,
+                    frameRates: [30]
+                )
+            ]
+
+            let sorted = CameraSessionController.sortedByIncreasingResolution(options)
+
+            XCTAssertEqual(
+                sorted.map(\.id),
+                ["640x480", "1080x1920", "1920x1080", "1552x1552"]
+            )
+        }
+    }
+
+    func testAutomaticCapturePrefersLowestResolutionAtThirtyFPS() async {
         await MainActor.run {
             let options = [
                 CameraResolutionOption.auto,
@@ -78,12 +119,19 @@ final class ModelsTests: XCTestCase {
                     width: 1280,
                     height: 720,
                     frameRates: [24, 30, 60]
+                ),
+                CameraResolutionOption(
+                    id: "640x480",
+                    label: "640 × 480",
+                    width: 640,
+                    height: 480,
+                    frameRates: [24, 30]
                 )
             ]
 
             let selected = CameraSessionController.automaticResolutionOption(from: options)
 
-            XCTAssertEqual(selected?.id, "1280x720")
+            XCTAssertEqual(selected?.id, "640x480")
             XCTAssertEqual(selected?.preferredFrameRate, 30)
         }
     }
@@ -134,6 +182,29 @@ final class ModelsTests: XCTestCase {
 
             XCTAssertEqual(sanitized.cameraResolutionID, CameraResolutionOption.auto.id)
             XCTAssertNil(sanitized.cameraFrameRate)
+        }
+    }
+
+    func testNativeSquareCaptureQualityRemainsSelected() async {
+        await MainActor.run {
+            let squareOption = CameraResolutionOption(
+                id: "1552x1552",
+                label: "1552 × 1552",
+                width: 1552,
+                height: 1552,
+                frameRates: [24, 30]
+            )
+            var saved = OverlaySettings.defaults
+            saved.cameraResolutionID = squareOption.id
+
+            let sanitized = AppDelegate.sanitizedCameraSettings(
+                saved,
+                availableResolutions: [.auto, squareOption],
+                cameraIsAvailable: true
+            )
+
+            XCTAssertEqual(sanitized.cameraResolutionID, squareOption.id)
+            XCTAssertEqual(sanitized.cameraFrameRate, 30)
         }
     }
 }
